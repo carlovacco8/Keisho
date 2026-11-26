@@ -243,6 +243,98 @@ Java_io_github_carlovacco8_keisho_KeishoActivity_nativeFolderPicked(JNIEnv* env,
     g_pick_result = g_pick_path.empty() ? AndroidPickResult::Cancelled : AndroidPickResult::Picked;
 }
 
+// ---------------------------------------------------------------------------
+// On-screen touch controls: a virtual SDL gamepad driven by TouchOverlay.java.
+// Keisho sees it as an ordinary pad (left stick, triggers, A/B/X/Y, shoulders,
+// Start/Back), so every game's default pad layout applies unchanged.
+// ---------------------------------------------------------------------------
+
+namespace {
+std::mutex     g_touch_mutex;
+SDL_Joystick*  g_touch_pad = nullptr;
+}  // namespace
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_io_github_carlovacco8_keisho_KeishoActivity_nativeTouchAttach(JNIEnv*, jclass)
+{
+    std::lock_guard<std::mutex> lock(g_touch_mutex);
+    if (g_touch_pad != nullptr) {
+        return JNI_TRUE;
+    }
+    if (!SDL_WasInit(SDL_INIT_JOYSTICK)) {
+        return JNI_FALSE;  // Keisho has not opened its input yet; Java retries.
+    }
+    SDL_VirtualJoystickDesc desc;
+    SDL_INIT_INTERFACE(&desc);
+    desc.type     = SDL_JOYSTICK_TYPE_GAMEPAD;
+    desc.naxes    = SDL_GAMEPAD_AXIS_COUNT;           // sticks + both triggers
+    desc.nbuttons = SDL_GAMEPAD_BUTTON_DPAD_RIGHT + 1; // A..d-pad, in SDL order
+    desc.name     = "Keisho touch controls";
+    const SDL_JoystickID id = SDL_AttachVirtualJoystick(&desc);
+    if (id == 0) {
+        sm2::osd::logf("touch: could not attach the virtual pad: %s", SDL_GetError());
+        return JNI_FALSE;
+    }
+    g_touch_pad = SDL_OpenJoystick(id);
+    if (g_touch_pad == nullptr) {
+        sm2::osd::logf("touch: could not open the virtual pad: %s", SDL_GetError());
+        SDL_DetachVirtualJoystick(id);
+        return JNI_FALSE;
+    }
+    // Triggers rest at the bottom of their range.
+    SDL_SetJoystickVirtualAxis(g_touch_pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, SDL_JOYSTICK_AXIS_MIN);
+    SDL_SetJoystickVirtualAxis(g_touch_pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, SDL_JOYSTICK_AXIS_MIN);
+    sm2::osd::logf("touch: virtual pad attached (id %u)", static_cast<unsigned>(id));
+    return JNI_TRUE;
+}
+
+/// Removes the virtual pad, e.g. when a real controller is plugged in, so
+/// the real one becomes player 1.
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_carlovacco8_keisho_KeishoActivity_nativeTouchDetach(JNIEnv*, jclass)
+{
+    std::lock_guard<std::mutex> lock(g_touch_mutex);
+    if (g_touch_pad == nullptr) {
+        return;
+    }
+    const SDL_JoystickID id = SDL_GetJoystickID(g_touch_pad);
+    SDL_CloseJoystick(g_touch_pad);
+    g_touch_pad = nullptr;
+    SDL_DetachVirtualJoystick(id);
+    sm2::osd::logf("touch: virtual pad detached");
+}
+
+/// axis: SDL_GamepadAxis; value: -1..1 for sticks, 0..1 for triggers.
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_carlovacco8_keisho_KeishoActivity_nativeTouchAxis(JNIEnv*, jclass, jint axis,
+                                                                 jfloat value)
+{
+    std::lock_guard<std::mutex> lock(g_touch_mutex);
+    if (g_touch_pad == nullptr || axis < 0 || axis >= SDL_GAMEPAD_AXIS_COUNT) {
+        return;
+    }
+    float v = value;
+    if (axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) {
+        v = v * 2.0f - 1.0f;  // 0..1 -> full raw range, released = minimum
+    }
+    v = v < -1.0f ? -1.0f : (v > 1.0f ? 1.0f : v);
+    const Sint16 raw = static_cast<Sint16>(v >= 0.0f ? v * SDL_JOYSTICK_AXIS_MAX
+                                                     : -v * SDL_JOYSTICK_AXIS_MIN);
+    SDL_SetJoystickVirtualAxis(g_touch_pad, axis, raw);
+}
+
+/// button: SDL_GamepadButton.
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_carlovacco8_keisho_KeishoActivity_nativeTouchButton(JNIEnv*, jclass, jint button,
+                                                                   jboolean down)
+{
+    std::lock_guard<std::mutex> lock(g_touch_mutex);
+    if (g_touch_pad == nullptr || button < 0 || button > SDL_GAMEPAD_BUTTON_DPAD_RIGHT) {
+        return;
+    }
+    SDL_SetJoystickVirtualButton(g_touch_pad, button, down == JNI_TRUE);
+}
+
 // Called by KeishoActivity on life-cycle changes, for android.log.
 extern "C" JNIEXPORT void JNICALL
 Java_io_github_carlovacco8_keisho_KeishoActivity_nativeLog(JNIEnv* env, jclass, jstring text)

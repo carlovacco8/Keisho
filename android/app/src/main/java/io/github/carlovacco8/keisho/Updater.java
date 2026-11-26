@@ -48,8 +48,11 @@ final class Updater {
         mActivity = activity;
     }
 
-    /** Checks in the background; shows the dialog only if a newer build exists. */
-    void checkAsync() {
+    /**
+     * Checks in the background; shows the dialog only if a newer build exists.
+     * manual: also say so when there is nothing new, or the check failed.
+     */
+    void checkAsync(boolean manual) {
         new Thread(() -> {
             try {
                 JSONObject info = new JSONObject(new String(
@@ -60,10 +63,17 @@ final class Updater {
                 Log.i(TAG, "installed " + local + ", available " + remote);
                 if (remote > local) {
                     mMain.post(() -> offer(info));
+                } else if (manual) {
+                    mMain.post(() -> Toast.makeText(mActivity,
+                            "Hai già l'ultima versione (build " + local + ")", Toast.LENGTH_LONG).show());
                 }
             } catch (Exception e) {
                 // Offline, rate-limited or no release yet: just play.
                 Log.i(TAG, "update check skipped: " + e);
+                if (manual) {
+                    mMain.post(() -> Toast.makeText(mActivity,
+                            "Controllo non riuscito: sei connesso a internet?", Toast.LENGTH_LONG).show());
+                }
             }
         }, "keisho-update-check").start();
     }
