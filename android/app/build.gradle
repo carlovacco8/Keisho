@@ -14,7 +14,7 @@ android {
         applicationId "io.github.carlovacco8.keisho"
         minSdk 26
         targetSdk 34
-        versionCode (System.getenv("KEISHO_VERSION_CODE") ?: "1") as int
+        versionCode Integer.parseInt(System.getenv("KEISHO_VERSION_CODE") ?: "1")
         versionName "0.9.63-android"
         ndk {
             abiFilters 'arm64-v8a'
