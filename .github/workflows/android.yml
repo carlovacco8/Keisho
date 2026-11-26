@@ -75,15 +75,18 @@ jobs:
           PREV_UP: ${{ steps.decide.outputs.prev_up }}
           PREV_PORT: ${{ steps.decide.outputs.prev_port }}
         run: |
-          log_since() {  # <repo> <old sha> <limit>
-            if [ -n "$2" ] && git -C "$1" cat-file -e "$2^{commit}" 2>/dev/null; then
-              git -C "$1" log --no-merges --format='%s' "$2..HEAD" | head -n "$3"
+          log_since() {  # <repo> <old sha> <limit> [paths...]
+            local repo=$1 old=$2 limit=$3; shift 3
+            if [ -n "$old" ] && git -C "$repo" cat-file -e "$old^{commit}" 2>/dev/null; then
+              git -C "$repo" log --no-merges --format='%s' "$old..HEAD" -- "$@" | head -n "$limit"
             else
-              git -C "$1" log --no-merges --format='%s' -n 10
+              git -C "$repo" log --no-merges --format='%s' -n 10 -- "$@"
             fi
           }
           log_since upstream "$PREV_UP" 40 > upstream_changes.txt
-          log_since port "$PREV_PORT" 20 > port_changes.txt
+          # Only the port's own files, so upstream commits are not listed twice.
+          log_since port "$PREV_PORT" 20 android .github/workflows/android.yml \
+            src/osd/android_glue.h src/osd/android_glue.cpp > port_changes.txt
           echo "--- upstream"; cat upstream_changes.txt
           echo "--- port"; cat port_changes.txt
 
