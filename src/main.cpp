@@ -2031,7 +2031,11 @@ int main(int argc, char** argv)
 
         // Build the picker's entry list from the launchable sets and turn it on.
         // Used at startup and when Esc unloads a game to return here.
+        // Whether there is a game list to go back to: there is from the start
+        // with a ROM folder, or once one is set in the settings.
+        bool has_game_list = will_show_picker;
         const auto show_picker = [&]() {
+            has_game_list = true;
             // A set is launchable when it has an archive in its ROM folder:
             // its own <name>.zip / .7z, or, for a clone, its parent's merged one.
             std::vector<osd::Gui::PickerEntry> entries;
@@ -2475,7 +2479,7 @@ int main(int argc, char** argv)
                         } else if (is_hotkey(event.key, Config::Hotkey::Exit)) {
                             // Return to the game picker when there is one,
                             // otherwise quit. Serviced after the event loop.
-                            if (will_show_picker && machine_any != nullptr) {
+                            if (has_game_list && machine_any != nullptr) {
                                 return_to_picker_requested = true;
                             } else {
                                 running = false;
@@ -2546,7 +2550,7 @@ int main(int argc, char** argv)
                 input.update_pad_shortcuts(options.config.pad_shortcuts);
             if (pad_shortcuts.exit) {
                 // As Esc: back to the games when there are some, else quit.
-                if (will_show_picker && machine_any != nullptr) {
+                if (has_game_list && machine_any != nullptr) {
                     return_to_picker_requested = true;
                 } else {
                     running = false;
@@ -3247,8 +3251,13 @@ int main(int argc, char** argv)
             if (!settings_was_visible && gui.visible()) {
                 list_inputs_at_open = list_inputs();
             }
+            // With no game the list must be behind the settings when they
+            // close, even if it was never built (started with no ROM folder):
+            // otherwise the screen is left empty.
             if (settings_was_visible && !gui.visible() && machine_any == nullptr
-                && list_inputs() != list_inputs_at_open) {
+                && (list_inputs() != list_inputs_at_open || !gui.picker_active())) {
+                SM2_INFO("settings closed with no game: %s the game list",
+                         gui.picker_active() ? "rebuilding" : "showing");
                 show_picker();
             }
             settings_was_visible = gui.visible();

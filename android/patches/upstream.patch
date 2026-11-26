@@ -277,7 +277,7 @@ index 86a9858..a374e2c 100644
      install(TARGETS keisho RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
      install(FILES "${CMAKE_SOURCE_DIR}/data/games.xml"
 diff --git a/src/main.cpp b/src/main.cpp
-index b4e37dc..ab88b38 100644
+index b4e37dc..bbcdcbb 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -61,6 +61,11 @@
@@ -323,7 +323,19 @@ index b4e37dc..ab88b38 100644
      }
  
      // -- headless boot test ------------------------------------------------
-@@ -2245,6 +2262,38 @@ int main(int argc, char** argv)
+@@ -2014,7 +2031,11 @@ int main(int argc, char** argv)
+ 
+         // Build the picker's entry list from the launchable sets and turn it on.
+         // Used at startup and when Esc unloads a game to return here.
++        // Whether there is a game list to go back to: there is from the start
++        // with a ROM folder, or once one is set in the settings.
++        bool has_game_list = will_show_picker;
+         const auto show_picker = [&]() {
++            has_game_list = true;
+             // A set is launchable when it has an archive in its ROM folder:
+             // its own <name>.zip / .7z, or, for a clone, its parent's merged one.
+             std::vector<osd::Gui::PickerEntry> entries;
+@@ -2245,6 +2266,38 @@ int main(int argc, char** argv)
              std::string slot;
          };
          std::optional<StateAction> state_action;
@@ -362,7 +374,7 @@ index b4e37dc..ab88b38 100644
          bool settings_was_visible = gui.visible();  ///< Settings visibility, last frame.
          // What the game list is built from, as it was when the settings opened:
          // the list is rebuilt only when one of these changed there.
-@@ -2385,6 +2434,9 @@ int main(int argc, char** argv)
+@@ -2385,6 +2438,9 @@ int main(int argc, char** argv)
  
              SDL_Event event;
              while (SDL_PollEvent(&event)) {
@@ -372,7 +384,7 @@ index b4e37dc..ab88b38 100644
                  // Let ImGui see every event, bar a key the System tab is
                  // binding, which its keyboard navigation would also press.
                  if (event.type != SDL_EVENT_KEY_DOWN || !gui.visible() || !gui.capturing_key()) {
-@@ -2396,6 +2448,13 @@ int main(int argc, char** argv)
+@@ -2396,6 +2452,13 @@ int main(int argc, char** argv)
                  }
  
                  switch (event.type) {
@@ -386,7 +398,25 @@ index b4e37dc..ab88b38 100644
                      case SDL_EVENT_QUIT:
                          running = false;
                          break;
-@@ -3110,6 +3169,15 @@ int main(int argc, char** argv)
+@@ -2416,7 +2479,7 @@ int main(int argc, char** argv)
+                         } else if (is_hotkey(event.key, Config::Hotkey::Exit)) {
+                             // Return to the game picker when there is one,
+                             // otherwise quit. Serviced after the event loop.
+-                            if (will_show_picker && machine_any != nullptr) {
++                            if (has_game_list && machine_any != nullptr) {
+                                 return_to_picker_requested = true;
+                             } else {
+                                 running = false;
+@@ -2487,7 +2550,7 @@ int main(int argc, char** argv)
+                 input.update_pad_shortcuts(options.config.pad_shortcuts);
+             if (pad_shortcuts.exit) {
+                 // As Esc: back to the games when there are some, else quit.
+-                if (will_show_picker && machine_any != nullptr) {
++                if (has_game_list && machine_any != nullptr) {
+                     return_to_picker_requested = true;
+                 } else {
+                     running = false;
+@@ -3110,6 +3173,15 @@ int main(int argc, char** argv)
                      g.timestamp = s.timestamp;
                      gui_slots.push_back(std::move(g));
                  }
@@ -402,7 +432,7 @@ index b4e37dc..ab88b38 100644
                  gui.set_state_slots(true, std::move(gui_slots));
              } else {
                  gui.set_state_slots(machine_any != nullptr, {});
-@@ -3122,6 +3190,46 @@ int main(int argc, char** argv)
+@@ -3122,6 +3194,46 @@ int main(int argc, char** argv)
              const bool gui_active =
                  gui.draw(options.config, gpu_names, pacer.measured_hz(),
                          use_software_renderer ? "Software" : gpu_backend_name, &input);
@@ -449,7 +479,22 @@ index b4e37dc..ab88b38 100644
              // An overlay Save/Load/Delete button is serviced like the hotkeys.
              if (std::optional<osd::Gui::StateRequest> req = gui.take_pending_state_request()) {
                  using A  = osd::Gui::StateRequest::Action;
-@@ -3164,6 +3272,11 @@ int main(int argc, char** argv)
+@@ -3139,8 +3251,13 @@ int main(int argc, char** argv)
+             if (!settings_was_visible && gui.visible()) {
+                 list_inputs_at_open = list_inputs();
+             }
++            // With no game the list must be behind the settings when they
++            // close, even if it was never built (started with no ROM folder):
++            // otherwise the screen is left empty.
+             if (settings_was_visible && !gui.visible() && machine_any == nullptr
+-                && list_inputs() != list_inputs_at_open) {
++                && (list_inputs() != list_inputs_at_open || !gui.picker_active())) {
++                SM2_INFO("settings closed with no game: %s the game list",
++                         gui.picker_active() ? "rebuilding" : "showing");
+                 show_picker();
+             }
+             settings_was_visible = gui.visible();
+@@ -3164,6 +3281,11 @@ int main(int argc, char** argv)
              // submitted: save NVRAM, wait for the GPU, drop the machine.
              if (return_to_picker_requested) {
                  return_to_picker_requested = false;
@@ -461,7 +506,7 @@ index b4e37dc..ab88b38 100644
                  async_soft.forget_machine();
                  if (machine_any != nullptr) {
                      machine_any->save_nvram();
-@@ -3220,6 +3333,12 @@ int main(int argc, char** argv)
+@@ -3220,6 +3342,12 @@ int main(int argc, char** argv)
                  } else {
                      adopt_game(std::move(*chosen));
                      SM2_INFO("picker: launched '%s'", loaded->game.name.c_str());
@@ -474,7 +519,7 @@ index b4e37dc..ab88b38 100644
                  }
                  pacer.resync();
                  continue;
-@@ -3368,6 +3487,10 @@ int main(int argc, char** argv)
+@@ -3368,6 +3496,10 @@ int main(int argc, char** argv)
              }
          }
  
