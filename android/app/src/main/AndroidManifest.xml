@@ -73,8 +73,11 @@
             </intent-filter>
         </activity>
 
-        <receiver
-            android:name=".InstallResultReceiver"
-            android:exported="false" />
+        <!-- Serves the downloaded update to Android's package installer. -->
+        <provider
+            android:name=".ApkProvider"
+            android:authorities="${applicationId}.apk"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

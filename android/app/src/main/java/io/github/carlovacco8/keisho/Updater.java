@@ -3,18 +3,17 @@
 //
 // At start-up the app fetches version.json from the release. When it names a
 // newer build, a dialog lists what changed; "Aggiorna" downloads the APK and
-// hands it to Android's PackageInstaller, which asks for confirmation and
-// replaces the app (both builds are signed with the same key).
+// opens it in Android's own installer screen (through ApkProvider), which asks
+// for confirmation and replaces the app (both builds are signed with the same
+// key). A copy is left in Download as a fallback.
 
 package io.github.carlovacco8.keisho;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.PendingIntent;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
-import android.content.pm.PackageInstaller;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
@@ -135,7 +134,7 @@ final class Updater {
         progress.show();
 
         new Thread(() -> {
-            File apk = new File(mActivity.getCacheDir(), "keisho-update.apk");
+            File apk = new File(mActivity.getCacheDir(), ApkProvider.FILE_NAME);
             try {
                 HttpURLConnection c = open(apkUrl);
                 long total = c.getContentLengthLong();
@@ -177,35 +176,34 @@ final class Updater {
         }, "keisho-update-download").start();
     }
 
+    /**
+     * Hands the APK to Android's own installer screen. It installs in its own
+     * process, so the update finishes even though it has to close Keisho (an
+     * install session committed from Keisho itself could stop with it on some
+     * phones). A copy also goes to Download, to install by hand if need be.
+     */
     private void install(File apk) {
+        copyToDownloads(apk);
         try {
-            PackageInstaller installer = mActivity.getPackageManager().getPackageInstaller();
-            PackageInstaller.SessionParams params =
-                    new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
-            params.setAppPackageName(mActivity.getPackageName());
-            int id = installer.createSession(params);
-            try (PackageInstaller.Session session = installer.openSession(id)) {
-                try (InputStream in = new FileInputStream(apk);
-                     OutputStream out = session.openWrite("keisho.apk", 0, apk.length())) {
-                    byte[] buffer = new byte[64 * 1024];
-                    int n;
-                    while ((n = in.read(buffer)) > 0) {
-                        out.write(buffer, 0, n);
-                    }
-                    session.fsync(out);
-                }
-                int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    flags |= PendingIntent.FLAG_MUTABLE;
-                }
-                Intent result = new Intent(mActivity, InstallResultReceiver.class);
-                PendingIntent pending = PendingIntent.getBroadcast(mActivity, id, result, flags);
-                session.commit(pending.getIntentSender());
-            }
-        } catch (IOException | RuntimeException e) {
-            Log.e(TAG, "install failed", e);
-            Toast.makeText(mActivity, "Installazione non riuscita: " + e.getMessage(),
+            Intent view = new Intent(Intent.ACTION_VIEW);
+            view.setDataAndType(ApkProvider.uri(mActivity), "application/vnd.android.package-archive");
+            view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            mActivity.startActivity(view);
+        } catch (RuntimeException e) {
+            Log.e(TAG, "no installer for the update", e);
+            Toast.makeText(mActivity, "Apri Download/Keisho-android-arm64.apk per installare l'aggiornamento",
                     Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void copyToDownloads(File apk) {
+        try {
+            File dir = android.os.Environment.getExternalStoragePublicDirectory(
+                    android.os.Environment.DIRECTORY_DOWNLOADS);
+            java.nio.file.Files.copy(apk.toPath(), new File(dir, "Keisho-android-arm64.apk").toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (Throwable e) {
+            Log.w(TAG, "could not copy the update to Download: " + e);
         }
     }
 
