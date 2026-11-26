@@ -35,6 +35,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -173,7 +174,8 @@ void Gui::draw_picker_android(Config& config)
     ImGui::SetNextWindowSize(vp->WorkSize);
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove
                                      | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus
-                                     | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar;
+                                     | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar
+                                     | ImGuiWindowFlags_NoNav;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
@@ -236,6 +238,46 @@ void Gui::draw_picker_android(Config& config)
         }
     };
 
+    // A pad, the remote or the arrows: up and down move between the tabs, the
+    // covers and the buttons; left and right move inside a row; A / Enter
+    // presses what is lit.
+    const auto key = [](std::initializer_list<ImGuiKey> keys) {
+        for (ImGuiKey k : keys) {
+            if (ImGui::IsKeyPressed(k, true)) return true;
+        }
+        return false;
+    };
+    const bool typing = io.WantTextInput;
+    bool nav_left = false, nav_right = false, nav_ok = false;
+    if (!typing && !m_load_error.has_value()) {
+        nav_left  = key({ImGuiKey_LeftArrow, ImGuiKey_GamepadDpadLeft, ImGuiKey_GamepadLStickLeft});
+        nav_right = key({ImGuiKey_RightArrow, ImGuiKey_GamepadDpadRight, ImGuiKey_GamepadLStickRight});
+        nav_ok    = ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)
+                 || ImGui::IsKeyPressed(ImGuiKey_GamepadFaceDown, false);
+        if (key({ImGuiKey_UpArrow, ImGuiKey_GamepadDpadUp, ImGuiKey_GamepadLStickUp})) {
+            m_car_zone = std::max(0, m_car_zone - 1);
+        }
+        if (key({ImGuiKey_DownArrow, ImGuiKey_GamepadDpadDown, ImGuiKey_GamepadLStickDown})) {
+            m_car_zone = std::min(2, m_car_zone + 1);
+        }
+        if (m_car_zone == 0) {
+            if (nav_left) m_car_tab = std::max(0, m_car_tab - 1);
+            if (nav_right) m_car_tab = std::min(4, m_car_tab + 1);
+        } else if (m_car_zone == 2) {
+            if (nav_left) m_car_button = std::max(0, m_car_button - 1);
+            if (nav_right) m_car_button = std::min(4, m_car_button + 1);
+        }
+    }
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        m_car_zone = 1;  // a finger: no lit button
+    }
+    const bool lit_zone_ok = nav_ok && m_car_zone != 1;
+    const float ring = std::max(2.0f, std::round(3.0f * u));
+    const auto lit = [&](ImVec2 a, ImVec2 b, float r) {
+        list->AddRect(ImVec2(a.x - ring * 1.5f, a.y - ring * 1.5f), ImVec2(b.x + ring * 1.5f, b.y + ring * 1.5f), kWhite,
+                      r + ring * 1.5f, 0, ring);
+    };
+
     const float margin = std::round(12.0f * u);
 
     // -- the top bar ------------------------------------------------------------
@@ -281,13 +323,16 @@ void Gui::draw_picker_android(Config& config)
         float       x = std::floor(o.x + (W - total) * 0.5f);
         const float h = top_h - std::round(10.0f * u);
         const float y = top_a.y + std::round(5.0f * u);
+        int tab_index = 0;
         for (const Tab& t : kTabs) {
+            const bool   is_lit = m_car_zone == 0 && m_car_tab == tab_index++;
             const float  w = ImGui::GetFont()->CalcTextSizeA(size, FLT_MAX, 0.0f, t.label).x + padx * 2.0f;
             const ImVec2 a(x, y), b(x + w, y + h);
             ImGui::PushID(t.label);
             ImGui::SetCursorScreenPos(a);
-            const bool tapped = ImGui::InvisibleButton("##tab", ImVec2(w, h));
+            const bool tapped = ImGui::InvisibleButton("##tab", ImVec2(w, h)) || (is_lit && lit_zone_ok);
             const bool held   = ImGui::IsItemActive();
+            if (is_lit) lit(a, b, h * 0.5f);
             ImGui::PopID();
             if (t.page < 0) {
                 list->AddRectFilled(a, b, kWhite, h * 0.5f);
@@ -331,13 +376,20 @@ void Gui::draw_picker_android(Config& config)
             w_search_min *= k;
         }
         float x = bot_a.x + pad;
+        const auto lit_button = [&](int i, ImVec2 a, ImVec2 b) {
+            const bool on = m_car_zone == 2 && m_car_button == i;
+            if (on) lit(a, b, (b.y - a.y) * 0.5f);
+            return on && lit_zone_ok;
+        };
         if (pill_button(list, "##play", ImVec2(x, y0), ImVec2(x + w_play, y1), kOrange, kOrangeHot, 0, kInk, text,
-                        "PLAY", true)) {
+                        "PLAY", true)
+            | lit_button(0, ImVec2(x, y0), ImVec2(x + w_play, y1))) {
             play();
         }
         x += w_play + gap;
         if (pill_button(list, "##saves", ImVec2(x, y0), ImVec2(x + w_saves, y1), kButton, kButtonHot, kButtonEdge,
-                        kWhite, text, "SAVES")) {
+                        kWhite, text, "SAVES")
+            | lit_button(1, ImVec2(x, y0), ImVec2(x + w_saves, y1))) {
             if (sel >= 0 && !m_load_error.has_value()) {
                 play();
                 m_android_states_after_launch = true;
@@ -345,7 +397,8 @@ void Gui::draw_picker_android(Config& config)
         }
         x += w_saves + gap;
         if (pill_button(list, "##find", ImVec2(x, y0), ImVec2(x + w_find, y1), kButton, kButtonHot, kButtonEdge, kWhite,
-                        text, "FIND")) {
+                        text, "FIND")
+            | lit_button(2, ImVec2(x, y0), ImVec2(x + w_find, y1))) {
             m_page    = kPagePaths;
             m_visible = true;
         }
@@ -374,6 +427,9 @@ void Gui::draw_picker_android(Config& config)
                 ImGui::ClearActiveID();
                 m_picker_drop_search = false;
             }
+            if (lit_button(3, sa, sb)) {
+                ImGui::SetKeyboardFocusHere();  // the search, from the pad: start typing
+            }
             const bool enter = ImGui::InputText("##search", m_picker_search, sizeof m_picker_search,
                                                 ImGuiInputTextFlags_EnterReturnsTrue);
             const bool active = ImGui::IsItemActive();
@@ -400,7 +456,8 @@ void Gui::draw_picker_android(Config& config)
             }
         }
         if (pill_button(list, "##quit", ImVec2(quit_x, y0), ImVec2(quit_x + w_quit, y1), kRed, kRedHot, 0, kWhite, text,
-                        "QUIT")) {
+                        "QUIT")
+            | lit_button(4, ImVec2(quit_x, y0), ImVec2(quit_x + w_quit, y1))) {
             SDL_Event quit{};
             quit.type = SDL_EVENT_QUIT;
             SDL_PushEvent(&quit);
@@ -430,21 +487,11 @@ void Gui::draw_picker_android(Config& config)
         return;
     }
 
-    // Keys, the D-pad and A.
-    const bool typing = io.WantTextInput;
-    if (!typing && !m_load_error.has_value()) {
-        if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, true) || ImGui::IsKeyPressed(ImGuiKey_GamepadDpadRight, true)
-            || ImGui::IsKeyPressed(ImGuiKey_GamepadLStickRight, true)) {
-            choose(std::min(sel + 1, n - 1));
-        }
-        if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow, true) || ImGui::IsKeyPressed(ImGuiKey_GamepadDpadLeft, true)
-            || ImGui::IsKeyPressed(ImGuiKey_GamepadLStickLeft, true)) {
-            choose(std::max(sel - 1, 0));
-        }
-        if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)
-            || ImGui::IsKeyPressed(ImGuiKey_GamepadFaceDown, false)) {
-            play();
-        }
+    // The covers' row: left / right choose, A plays.
+    if (m_car_zone == 1) {
+        if (nav_right) choose(std::min(sel + 1, n - 1));
+        if (nav_left) choose(std::max(sel - 1, 0));
+        if (nav_ok) play();
     }
 
     // A finger on the covers: drag sideways to scroll, tap to choose or play.
