@@ -183,9 +183,15 @@ int big_dialog(const char* id, const char* title, std::initializer_list<const ch
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (bw - tw) * 0.5f));
         ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(kOrange), "%s", title);
         ImGui::Dummy(ImVec2(bw, std::round(4.0f * u)));
+        // The lit button is the orange one: the one the pad is on (or the
+        // finger touched), remembered from the last frame.
+        ImGuiStorage* store   = ImGui::GetStateStorage();
+        const ImGuiID lit_key = ImGui::GetID("##lit");
+        const int     lit     = ImGui::IsWindowAppearing() ? 0 : store->GetInt(lit_key, 0);
+        int           lit_now = lit;
         int i = 0;
         for (const char* label : buttons) {
-            const bool first = i == 0;
+            const bool first = i == lit;
             ImGui::PushStyleColor(ImGuiCol_Button, ImGui::ColorConvertU32ToFloat4(first ? kOrange : kButton));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertU32ToFloat4(first ? kOrangeHot : kButtonHot));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::ColorConvertU32ToFloat4(first ? kOrangeHot : kButtonHot));
@@ -193,13 +199,17 @@ int big_dialog(const char* id, const char* title, std::initializer_list<const ch
             if (ImGui::Button(label, ImVec2(bw, bh))) {
                 pressed = i;
             }
-            if (first && ImGui::IsWindowAppearing()) {
+            if (ImGui::IsItemFocused() || ImGui::IsItemActive()) {
+                lit_now = i;
+            }
+            if (i == 0 && ImGui::IsWindowAppearing()) {
                 ImGui::SetItemDefaultFocus();
                 ImGui::SetKeyboardFocusHere(-1);
             }
             ImGui::PopStyleColor(4);
             ++i;
         }
+        store->SetInt(lit_key, lit_now);
         ImGui::PopFont();
         if (pressed < 0 && !ImGui::IsWindowAppearing()
             && (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))) {
