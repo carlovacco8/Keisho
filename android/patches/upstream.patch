@@ -277,7 +277,7 @@ index 86a9858..3274dea 100644
      install(TARGETS keisho RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
      install(FILES "${CMAKE_SOURCE_DIR}/data/games.xml"
 diff --git a/src/main.cpp b/src/main.cpp
-index b4e37dc..4a687b5 100644
+index b4e37dc..30fb063 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -61,6 +61,16 @@
@@ -522,7 +522,21 @@ index b4e37dc..4a687b5 100644
                  }
              }
  
-@@ -3110,6 +3227,15 @@ int main(int argc, char** argv)
+@@ -2736,7 +2853,13 @@ int main(int argc, char** argv)
+                 }
+                 {
+                     auto scope = core::maybe_scope(stage_run_frame, profile_sample);
++#if defined(__ANDROID__)
++                    const u64 emulation_start = SDL_GetTicksNS();
++                    machine_any->run_frame();
++                    osd::android_emulation_time(SDL_GetTicksNS() - emulation_start);
++#else
+                     machine_any->run_frame();
++#endif
+                 }
+                 if (!rewinding) {
+                     rewind.capture(*machine_any);
+@@ -3110,6 +3233,15 @@ int main(int argc, char** argv)
                      g.timestamp = s.timestamp;
                      gui_slots.push_back(std::move(g));
                  }
@@ -538,7 +552,7 @@ index b4e37dc..4a687b5 100644
                  gui.set_state_slots(true, std::move(gui_slots));
              } else {
                  gui.set_state_slots(machine_any != nullptr, {});
-@@ -3122,6 +3248,20 @@ int main(int argc, char** argv)
+@@ -3122,6 +3254,20 @@ int main(int argc, char** argv)
              const bool gui_active =
                  gui.draw(options.config, gpu_names, pacer.measured_hz(),
                          use_software_renderer ? "Software" : gpu_backend_name, &input);
@@ -559,7 +573,7 @@ index b4e37dc..4a687b5 100644
              // An overlay Save/Load/Delete button is serviced like the hotkeys.
              if (std::optional<osd::Gui::StateRequest> req = gui.take_pending_state_request()) {
                  using A  = osd::Gui::StateRequest::Action;
-@@ -3139,8 +3279,13 @@ int main(int argc, char** argv)
+@@ -3139,8 +3285,13 @@ int main(int argc, char** argv)
              if (!settings_was_visible && gui.visible()) {
                  list_inputs_at_open = list_inputs();
              }
@@ -574,7 +588,7 @@ index b4e37dc..4a687b5 100644
                  show_picker();
              }
              settings_was_visible = gui.visible();
-@@ -3164,6 +3309,9 @@ int main(int argc, char** argv)
+@@ -3164,6 +3315,9 @@ int main(int argc, char** argv)
              // submitted: save NVRAM, wait for the GPU, drop the machine.
              if (return_to_picker_requested) {
                  return_to_picker_requested = false;
@@ -584,7 +598,7 @@ index b4e37dc..4a687b5 100644
                  async_soft.forget_machine();
                  if (machine_any != nullptr) {
                      machine_any->save_nvram();
-@@ -3349,6 +3497,9 @@ int main(int argc, char** argv)
+@@ -3349,6 +3503,9 @@ int main(int argc, char** argv)
                  }
              }
  
@@ -594,7 +608,7 @@ index b4e37dc..4a687b5 100644
              // Last thing in the loop, so the wait absorbs the whole frame's cost.
              frames_written_off += pacer.wait();
  
-@@ -3368,6 +3519,10 @@ int main(int argc, char** argv)
+@@ -3368,6 +3525,10 @@ int main(int argc, char** argv)
              }
          }
  
@@ -758,7 +772,7 @@ index 720a708..7137b60 100644
  
  }  // namespace sm2::osd
 diff --git a/src/osd/gui.cpp b/src/osd/gui.cpp
-index dd63b58..98daea7 100644
+index dd63b58..5fac6a2 100644
 --- a/src/osd/gui.cpp
 +++ b/src/osd/gui.cpp
 @@ -21,6 +21,9 @@
@@ -942,7 +956,38 @@ index dd63b58..98daea7 100644
  
      kit.begin_group(tr("Support development"));
      {
-@@ -4201,6 +4298,90 @@ void Gui::draw_sinden_border(const Config& config)
+@@ -3916,6 +4013,22 @@ void Gui::draw_fps_overlay(float measured_hz, const char* renderer_label)
+     const ImVec2         margin{10.0F, 10.0F};
+ 
+     // Sized to fit rather than fixed, so a longer renderer label never clips.
++#if defined(__ANDROID__)
++    // Top centre, clear of the EXIT button, with the speed and where a frame's
++    // time goes: EMU is the emulation alone, FRAME all of a frame's work. EMU
++    // near FRAME and above 17.4 ms: the processor is the limit.
++    char text[128];
++    std::snprintf(text, sizeof(text), "%.1f FPS  %d%%  EMU %.1f ms  FRAME %.1f ms  [%s]",
++                  static_cast<double>(measured_hz),
++                  static_cast<int>(measured_hz / 57.5245F * 100.0F + 0.5F),
++                  static_cast<double>(android_emulation_ms()), static_cast<double>(android_frame_ms()),
++                  renderer_label);
++    const ImVec2 text_size = ImGui::CalcTextSize(text);
++    const ImVec2 padding{8.0F, 4.0F};
++    const ImVec2 window_size{text_size.x + padding.x * 2.0F, text_size.y + padding.y * 2.0F};
++    ImGui::SetNextWindowPos(ImVec2(std::floor(viewport->WorkPos.x + (viewport->WorkSize.x - window_size.x) * 0.5F),
++                                   viewport->WorkPos.y + margin.y));
++#else
+     char text[64];
+     std::snprintf(text, sizeof(text), "%.1f FPS  [%s]", static_cast<double>(measured_hz),
+                  renderer_label);
+@@ -3926,6 +4039,7 @@ void Gui::draw_fps_overlay(float measured_hz, const char* renderer_label)
+     ImGui::SetNextWindowPos(
+         ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - window_size.x - margin.x,
+                viewport->WorkPos.y + margin.y));
++#endif
+     ImGui::SetNextWindowSize(window_size);
+     ImGui::SetNextWindowBgAlpha(0.55F);
+ 
+@@ -4201,6 +4315,90 @@ void Gui::draw_sinden_border(const Config& config)
      list->AddRectFilled(ImVec2(x1 - t, y0), ImVec2(x1, y1), colour);        // right
  }
  
@@ -1033,7 +1078,7 @@ index dd63b58..98daea7 100644
  // ---------------------------------------------------------------------------
  // Directory picker (Paths tab "Browse..." buttons)
  // ---------------------------------------------------------------------------
-@@ -4211,12 +4392,17 @@ void Gui::open_dir_picker(DirPickerTarget target, const std::string& initial)
+@@ -4211,12 +4409,17 @@ void Gui::open_dir_picker(DirPickerTarget target, const std::string& initial)
  
      m_dir_picker_target = target;
  
@@ -1051,7 +1096,7 @@ index dd63b58..98daea7 100644
  #else
          const char* home = std::getenv("HOME");
  #endif
-@@ -4274,11 +4460,37 @@ void Gui::draw_dir_picker_popup(Config& config)
+@@ -4274,11 +4477,37 @@ void Gui::draw_dir_picker_popup(Config& config)
          ImGui::OpenPopup(tr_id("Choose Directory"));
      }
  
@@ -1091,7 +1136,7 @@ index dd63b58..98daea7 100644
  
      char buf[1024];
      std::snprintf(buf, sizeof buf, "%s", m_dir_picker_path.c_str());
-@@ -4317,8 +4529,13 @@ void Gui::draw_dir_picker_popup(Config& config)
+@@ -4317,8 +4546,13 @@ void Gui::draw_dir_picker_popup(Config& config)
  
      if (ImGui::BeginChild("##dirlist",
                            ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 2), true)) {
@@ -1106,7 +1151,7 @@ index dd63b58..98daea7 100644
                  m_dir_picker_path = (current / name).string();
                  refresh_dir_picker_entries();
              }
-@@ -4490,6 +4707,11 @@ namespace {
+@@ -4490,6 +4724,11 @@ namespace {
  
  void Gui::draw_picker(Config& config)
  {
@@ -1118,7 +1163,7 @@ index dd63b58..98daea7 100644
      poll_scraper_and_load_metadata();
  
      // Show the pointer in case a previous state (light-gun mode) hid it.
-@@ -4820,7 +5042,12 @@ void Gui::draw_picker(Config& config)
+@@ -4820,7 +5059,12 @@ void Gui::draw_picker(Config& config)
          }
          if (entry.art_state == PickerEntry::Art::Unknown && m_picker_backend != nullptr && m_picker_scraper != nullptr) {
              const Scraper::Metadata meta = m_picker_scraper->load_metadata(entry.name, entry.title);

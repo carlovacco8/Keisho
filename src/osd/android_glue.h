@@ -59,6 +59,14 @@ void android_boost_emulation_thread();
 /// for the performance-hint session.
 void android_frame_work(u64 nanoseconds);
 
+/// Each frame, the time the machine's run_frame() took (the emulation alone).
+void android_emulation_time(u64 nanoseconds);
+
+/// Smoothed milliseconds per frame, for STATS: the emulation alone, and the
+/// whole frame's work (emulation, drawing, presenting).
+[[nodiscard]] float android_emulation_ms();
+[[nodiscard]] float android_frame_ms();
+
 /// Tells the Java side whether Keisho's settings are open, so the on-screen
 /// controls step aside while they are. Call when it changes.
 void android_menu_changed(bool open);

@@ -216,6 +216,15 @@ using HintReport        = int (*)(void*, int64_t);
 HintReport g_hint_report  = nullptr;
 void*      g_hint_session = nullptr;
 
+float g_emulation_ms = 0.0f;  // smoothed, emulation thread only
+float g_frame_ms     = 0.0f;
+
+void smooth(float& average, u64 nanoseconds)
+{
+    const float ms = static_cast<float>(nanoseconds) / 1.0e6f;
+    average        = average <= 0.0f ? ms : average + (ms - average) * 0.05f;
+}
+
 }  // namespace
 
 void android_boost_emulation_thread()
@@ -257,8 +266,17 @@ void android_boost_emulation_thread()
     }
 }
 
+float android_emulation_ms() { return g_emulation_ms; }
+float android_frame_ms() { return g_frame_ms; }
+
+void android_emulation_time(u64 nanoseconds)
+{
+    smooth(g_emulation_ms, nanoseconds);
+}
+
 void android_frame_work(u64 nanoseconds)
 {
+    smooth(g_frame_ms, nanoseconds);
     if (g_hint_session != nullptr && nanoseconds > 0) {
         g_hint_report(g_hint_session, static_cast<int64_t>(nanoseconds));
     }
