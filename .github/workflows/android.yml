@@ -2,7 +2,7 @@ name: Android
 
 # Builds the Android / Android TV APK (arm64-v8a) from the LATEST upstream
 # Keisho (Keisho-Emu/Keisho, branch main) with this branch's Android port laid
-# over it (android/tools/prepare-upstream.sh).
+# over it (android/scripts/prepare-upstream.sh).
 #
 # * A push to the android branch always builds.
 # * The scheduled watcher on main (upstream-watch.yml) dispatches this with
@@ -89,7 +89,7 @@ jobs:
 
       - name: Lay the Android port over upstream
         if: steps.decide.outputs.build == 'true'
-        run: port/android/tools/prepare-upstream.sh port upstream
+        run: port/android/scripts/prepare-upstream.sh port upstream
 
       - name: Install build tools
         if: steps.decide.outputs.build == 'true'
