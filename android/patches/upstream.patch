@@ -277,7 +277,7 @@ index 86a9858..3274dea 100644
      install(TARGETS keisho RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
      install(FILES "${CMAKE_SOURCE_DIR}/data/games.xml"
 diff --git a/src/main.cpp b/src/main.cpp
-index b4e37dc..874c004 100644
+index b4e37dc..4f2c7c4 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -61,6 +61,16 @@
@@ -501,7 +501,22 @@ index b4e37dc..874c004 100644
                              } else if (is_hotkey(event.key, Config::Hotkey::Fps) && !event.key.repeat) {
                                  options.config.show_fps = !options.config.show_fps;
                              } else if (is_hotkey(event.key, Config::Hotkey::FastForward) && !event.key.repeat) {
-@@ -2487,7 +2604,7 @@ int main(int argc, char** argv)
+@@ -2474,6 +2591,14 @@ int main(int argc, char** argv)
+                         // Hotplug and axis motion events are passed on even
+                         // with the overlay open, since its calibration needs them.
+                         input.handle_event(event);
++#if defined(__ANDROID__)
++                        // Say on screen which pad was found: on a TV there is
++                        // no other way to see whether it was taken.
++                        if (event.type == SDL_EVENT_GAMEPAD_ADDED) {
++                            const char* pad_name = SDL_GetGamepadNameForID(event.gdevice.which);
++                            gui.notify(std::string("Joypad: ") + (pad_name != nullptr ? pad_name : "?"));
++                        }
++#endif
+                         break;
+                 }
+             }
+@@ -2487,7 +2612,7 @@ int main(int argc, char** argv)
                  input.update_pad_shortcuts(options.config.pad_shortcuts);
              if (pad_shortcuts.exit) {
                  // As Esc: back to the games when there are some, else quit.
@@ -510,7 +525,7 @@ index b4e37dc..874c004 100644
                      return_to_picker_requested = true;
                  } else {
                      running = false;
-@@ -2498,9 +2615,9 @@ int main(int argc, char** argv)
+@@ -2498,9 +2623,9 @@ int main(int argc, char** argv)
              }
              if (!gui.visible() && machine_any != nullptr) {
                  if (pad_shortcuts.save) {
@@ -522,21 +537,21 @@ index b4e37dc..874c004 100644
                  }
              }
  
-@@ -2736,7 +2853,13 @@ int main(int argc, char** argv)
+@@ -2736,7 +2861,13 @@ int main(int argc, char** argv)
                  }
                  {
                      auto scope = core::maybe_scope(stage_run_frame, profile_sample);
 +#if defined(__ANDROID__)
 +                    const u64 emulation_start = SDL_GetTicksNS();
-+                    machine_any->run_frame();
+                     machine_any->run_frame();
 +                    osd::android_emulation_time(SDL_GetTicksNS() - emulation_start);
 +#else
-                     machine_any->run_frame();
++                    machine_any->run_frame();
 +#endif
                  }
                  if (!rewinding) {
                      rewind.capture(*machine_any);
-@@ -2802,6 +2925,18 @@ int main(int argc, char** argv)
+@@ -2802,6 +2933,18 @@ int main(int argc, char** argv)
                  }
              }
  
@@ -555,7 +570,7 @@ index b4e37dc..874c004 100644
              // The scope closes before the continue below so a skipped frame's
              // SDL_Delay is not folded into present_wait.
              bool begin_ok;
-@@ -3110,6 +3245,15 @@ int main(int argc, char** argv)
+@@ -3110,6 +3253,15 @@ int main(int argc, char** argv)
                      g.timestamp = s.timestamp;
                      gui_slots.push_back(std::move(g));
                  }
@@ -571,7 +586,7 @@ index b4e37dc..874c004 100644
                  gui.set_state_slots(true, std::move(gui_slots));
              } else {
                  gui.set_state_slots(machine_any != nullptr, {});
-@@ -3122,6 +3266,20 @@ int main(int argc, char** argv)
+@@ -3122,6 +3274,20 @@ int main(int argc, char** argv)
              const bool gui_active =
                  gui.draw(options.config, gpu_names, pacer.measured_hz(),
                          use_software_renderer ? "Software" : gpu_backend_name, &input);
@@ -592,7 +607,7 @@ index b4e37dc..874c004 100644
              // An overlay Save/Load/Delete button is serviced like the hotkeys.
              if (std::optional<osd::Gui::StateRequest> req = gui.take_pending_state_request()) {
                  using A  = osd::Gui::StateRequest::Action;
-@@ -3139,8 +3297,13 @@ int main(int argc, char** argv)
+@@ -3139,8 +3305,13 @@ int main(int argc, char** argv)
              if (!settings_was_visible && gui.visible()) {
                  list_inputs_at_open = list_inputs();
              }
@@ -607,7 +622,7 @@ index b4e37dc..874c004 100644
                  show_picker();
              }
              settings_was_visible = gui.visible();
-@@ -3164,6 +3327,9 @@ int main(int argc, char** argv)
+@@ -3164,6 +3335,9 @@ int main(int argc, char** argv)
              // submitted: save NVRAM, wait for the GPU, drop the machine.
              if (return_to_picker_requested) {
                  return_to_picker_requested = false;
@@ -617,7 +632,7 @@ index b4e37dc..874c004 100644
                  async_soft.forget_machine();
                  if (machine_any != nullptr) {
                      machine_any->save_nvram();
-@@ -3349,6 +3515,9 @@ int main(int argc, char** argv)
+@@ -3349,6 +3523,9 @@ int main(int argc, char** argv)
                  }
              }
  
@@ -627,7 +642,7 @@ index b4e37dc..874c004 100644
              // Last thing in the loop, so the wait absorbs the whole frame's cost.
              frames_written_off += pacer.wait();
  
-@@ -3368,6 +3537,10 @@ int main(int argc, char** argv)
+@@ -3368,6 +3545,10 @@ int main(int argc, char** argv)
              }
          }
  

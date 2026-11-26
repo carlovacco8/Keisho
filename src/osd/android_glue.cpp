@@ -102,6 +102,11 @@ void android_prepare()
     // but cannot open them from an app, which left the pad dead: its buttons
     // reached nobody and Android turned B into Back.
     SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI, "0");
+    // A TV's remotes (the SHIELD remote, HDMI-CEC) are not players. As
+    // joysticks they took both player slots before a real pad was found, so
+    // the pad was never opened: its buttons went nowhere and B became Back.
+    // As keys they still move through the list (arrows, Enter, Back).
+    SDL_SetHint(SDL_HINT_TV_REMOTE_AS_JOYSTICK, "0");
     // Arcade monitors are landscape. Without this SDL lets a resizable window
     // follow the phone into portrait, overriding the manifest.
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
