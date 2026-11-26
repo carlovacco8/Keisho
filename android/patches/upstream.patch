@@ -440,6 +440,18 @@ index b4e37dc..ab88b38 100644
          if (texture_dumper) {
              async_soft.wait();
              texture_dumper->finish(machine_iface);
+diff --git a/src/osd/audio.cpp b/src/osd/audio.cpp
+index 9a6f00a..48b9557 100644
+--- a/src/osd/audio.cpp
++++ b/src/osd/audio.cpp
+@@ -102,6 +102,7 @@ bool Audio::init(u32 sample_rate, u32 channels)
+     SDL_PutAudioStreamData(m_stream, silence.data(),
+                            static_cast<int>(silence.size() * sizeof(s16)));
+ 
++    SM2_INFO("audio: driver '%s'", SDL_GetCurrentAudioDriver() ? SDL_GetCurrentAudioDriver() : "?");
+     const SDL_AudioDeviceID device = SDL_GetAudioStreamDevice(m_stream);
+     SDL_AudioSpec device_spec{};
+     int frames = 0;
 diff --git a/src/osd/gui.cpp b/src/osd/gui.cpp
 index dd63b58..e86035a 100644
 --- a/src/osd/gui.cpp

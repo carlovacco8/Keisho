@@ -102,6 +102,7 @@ bool Audio::init(u32 sample_rate, u32 channels)
     SDL_PutAudioStreamData(m_stream, silence.data(),
                            static_cast<int>(silence.size() * sizeof(s16)));
 
+    SM2_INFO("audio: driver '%s'", SDL_GetCurrentAudioDriver() ? SDL_GetCurrentAudioDriver() : "?");
     const SDL_AudioDeviceID device = SDL_GetAudioStreamDevice(m_stream);
     SDL_AudioSpec device_spec{};
     int frames = 0;

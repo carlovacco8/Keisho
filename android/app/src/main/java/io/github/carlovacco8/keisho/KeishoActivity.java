@@ -246,6 +246,34 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
     protected void onPause() {
         lifecycle("onPause");
         super.onPause();
+        exportLogs();
+    }
+
+    /**
+     * Copies keisho.log and android.log to Keisho/log in the device's own
+     * storage, where a file manager can open them (the app's folder under
+     * Android/data cannot be browsed on recent Android). Done whenever the
+     * app leaves the screen, so the copy covers the session just played.
+     */
+    private void exportLogs() {
+        final File from = Setup.filesDir(this);
+        new Thread(() -> {
+            try {
+                File to = new File(Environment.getExternalStorageDirectory(), "Keisho/log");
+                if (!to.isDirectory() && !to.mkdirs()) {
+                    return;
+                }
+                for (String name : new String[] { "keisho.log", "android.log" }) {
+                    File src = new File(from, name);
+                    if (src.isFile()) {
+                        java.nio.file.Files.copy(src.toPath(), new File(to, name).toPath(),
+                                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    }
+                }
+            } catch (Throwable e) {
+                Log.w(TAG, "could not copy the logs: " + e);
+            }
+        }, "log-export").start();
     }
 
     @Override
