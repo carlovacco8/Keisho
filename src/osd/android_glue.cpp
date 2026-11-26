@@ -97,6 +97,11 @@ void android_prepare()
 {
     // Deliver Back to the program instead of letting Android close the app.
     SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+    // Controllers through Android's own input, never SDL's HIDAPI drivers.
+    // HIDAPI claims some Bluetooth pads (the Amazon Luna one, for instance)
+    // but cannot open them from an app, which left the pad dead: its buttons
+    // reached nobody and Android turned B into Back.
+    SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI, "0");
     // Arcade monitors are landscape. Without this SDL lets a resizable window
     // follow the phone into portrait, overriding the manifest.
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
