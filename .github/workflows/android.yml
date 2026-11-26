@@ -78,6 +78,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.14.3'
+          # The submodules carry their own sample wrappers; we use none of them.
+          validate-wrappers: false
 
       - name: Build APK
         env:
