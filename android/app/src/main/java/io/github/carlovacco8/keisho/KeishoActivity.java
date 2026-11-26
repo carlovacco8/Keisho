@@ -60,6 +60,7 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
     private static native void nativeTouchDetach();
     private static native void nativeTouchAxis(int axis, float value);
     private static native void nativeTouchButton(int button, boolean down);
+    private static native void nativeSetSlot(int slot);
 
     private final Handler mMain = new Handler(Looper.getMainLooper());
     private File mFilesDir;
@@ -71,6 +72,7 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
     private GameDb mGameDb;
     private String mCurrentSet = "";
     private boolean mPadAttached;
+    private boolean mMenuOpen;   // Keisho's settings are open: the controls step aside
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -95,6 +97,15 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
     static void touchAxis(int axis, float value) {
         try {
             nativeTouchAxis(axis, value);
+        } catch (UnsatisfiedLinkError ignored) {
+            // Native side not loaded (yet).
+        }
+    }
+
+    /** The save slot SAVE and LOAD use (the SLOT button). */
+    static void setSlot(int slot) {
+        try {
+            nativeSetSlot(slot);
         } catch (UnsatisfiedLinkError ignored) {
             // Native side not loaded (yet).
         }
@@ -129,6 +140,18 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
      */
     public void onGameChanged(final String set) {
         runOnUiThread(() -> applyGame(set == null ? "" : set));
+    }
+
+    /**
+     * Called by Keisho (SDL thread) when its settings open or close: the
+     * on-screen controls hide while they are open, so the settings can be
+     * touched freely (as on M2EA, where the game waits paused beside them).
+     */
+    public void onMenuChanged(final boolean open) {
+        runOnUiThread(() -> {
+            mMenuOpen = open;
+            updateTouchVisibility();
+        });
     }
 
     private void applyGame(String set) {
@@ -186,13 +209,21 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
         if (mOverlay == null) {
             return;
         }
-        boolean show = mTouchMode == 1 || !hasRealController();
-        mOverlay.setVisibility(show ? android.view.View.VISIBLE : android.view.View.GONE);
-        if (show) {
-            attachPadWhenReady();
-        } else {
+        boolean wanted = mTouchMode == 1 || !hasRealController();
+        if (!wanted) {
+            mOverlay.setVisibility(android.view.View.GONE);
             mOverlay.releaseAll();
             detachPad();
+            return;
+        }
+        attachPadWhenReady();
+        // Over the settings the controls are only in the way: hidden, but the
+        // virtual pad stays, so nothing is re-detected when they come back.
+        if (mMenuOpen) {
+            mOverlay.releaseAll();
+            mOverlay.setVisibility(android.view.View.GONE);
+        } else {
+            mOverlay.setVisibility(android.view.View.VISIBLE);
         }
     }
 

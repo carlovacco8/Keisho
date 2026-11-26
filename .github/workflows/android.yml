@@ -86,7 +86,7 @@ jobs:
           log_since upstream "$PREV_UP" 40 > upstream_changes.txt
           # Only the port's own files, so upstream commits are not listed twice.
           log_since port "$PREV_PORT" 20 android .github/workflows/android.yml \
-            src/osd/android_glue.h src/osd/android_glue.cpp > port_changes.txt
+            src/osd/android_glue.h src/osd/android_glue.cpp src/osd/android_picker.cpp > port_changes.txt
           echo "--- upstream"; cat upstream_changes.txt
           echo "--- port"; cat port_changes.txt
 

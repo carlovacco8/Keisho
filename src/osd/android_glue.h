@@ -48,6 +48,14 @@ bool android_translate_event(SDL_Event* event);
 /// the on-screen controls match it and hide over the list. Call when it changes.
 void android_game_changed(const std::string& set);
 
+/// Tells the Java side whether Keisho's settings are open, so the on-screen
+/// controls step aside while they are. Call when it changes.
+void android_menu_changed(bool open);
+
+/// The save-state slot the touch controls' SLOT button chose ("1" to "4"),
+/// used by the quick save / load keys.
+[[nodiscard]] std::string android_quick_slot();
+
 enum class AndroidPickResult { None, Picked, Cancelled, Unavailable };
 
 /// Polled each frame: the outcome of android_open_folder_picker(), once.

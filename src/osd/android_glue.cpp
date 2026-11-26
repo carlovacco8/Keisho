@@ -14,6 +14,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <atomic>
 #include <ctime>
 #include <mutex>
 #include <unistd.h>
@@ -24,6 +25,8 @@ namespace {
 
 std::FILE*  g_android_log = nullptr;
 std::mutex  g_log_mutex;
+
+std::atomic<int>  g_quick_slot{1};  ///< set by the SLOT button (nativeSetSlot)
 
 std::mutex        g_pick_mutex;
 AndroidPickResult g_pick_result = AndroidPickResult::None;
@@ -197,6 +200,32 @@ void android_game_changed(const std::string& set)
     logf("game: %s", set.empty() ? "(game list)" : set.c_str());
 }
 
+void android_menu_changed(bool open)
+{
+    auto* env      = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
+    auto  activity = static_cast<jobject>(SDL_GetAndroidActivity());
+    if (env == nullptr || activity == nullptr) {
+        return;
+    }
+    jclass    cls    = env->GetObjectClass(activity);
+    jmethodID method = cls != nullptr ? env->GetMethodID(cls, "onMenuChanged", "(Z)V") : nullptr;
+    if (method != nullptr) {
+        env->CallVoidMethod(activity, method, open ? JNI_TRUE : JNI_FALSE);
+    }
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+    }
+    if (cls != nullptr) {
+        env->DeleteLocalRef(cls);
+    }
+    env->DeleteLocalRef(activity);
+}
+
+std::string android_quick_slot()
+{
+    return std::to_string(g_quick_slot.load());
+}
+
 bool android_open_folder_picker(const std::string& initial)
 {
     {
@@ -357,6 +386,13 @@ Java_io_github_carlovacco8_keisho_KeishoActivity_nativeTouchButton(JNIEnv*, jcla
         return;
     }
     SDL_SetJoystickVirtualButton(g_touch_pad, button, down == JNI_TRUE);
+}
+
+/// The SLOT button: which save-state slot the quick save / load keys use.
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_carlovacco8_keisho_KeishoActivity_nativeSetSlot(JNIEnv*, jclass, jint slot)
+{
+    sm2::osd::g_quick_slot.store(slot < 1 ? 1 : (slot > 9 ? 9 : static_cast<int>(slot)));
 }
 
 // Called by KeishoActivity on life-cycle changes, for android.log.

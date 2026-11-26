@@ -8,7 +8,7 @@ set -euo pipefail
 A="$(cd "$1" && pwd)"
 U="$(cd "$2" && pwd)"
 
-cp "$A/src/osd/android_glue.h" "$A/src/osd/android_glue.cpp" "$U/src/osd/"
+cp "$A/src/osd/android_glue.h" "$A/src/osd/android_glue.cpp" "$A/src/osd/android_picker.cpp" "$U/src/osd/"
 rm -rf "$U/android"
 cp -r "$A/android" "$U/android"
 
