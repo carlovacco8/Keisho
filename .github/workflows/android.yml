@@ -132,7 +132,10 @@ jobs:
             -DSM2_BUILD_OPENGL_ES=ON \
             -DSM2_BUILD_VULKAN=OFF \
             -DSM2_SHADER_WERROR=OFF \
-            -DSM2_EVDEV=OFF
+            -DSM2_EVDEV=OFF \
+            -DSM2_LTO=ON \
+            -DCMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG -mtune=cortex-a57" \
+            -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG -mtune=cortex-a57"
 
       - name: Build native libraries
         if: steps.decide.outputs.build == 'true'
