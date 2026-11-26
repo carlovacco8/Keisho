@@ -78,7 +78,6 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
     // Physical pads reach the game through the same virtual pad as the touch
     // controls (see dispatchKeyEvent): SDL does not take them itself.
     private boolean mBridge;
-    private boolean mSelectHeld, mStartHeld;
     private int mHatX, mHatY;
 
     @Override
@@ -327,14 +326,8 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
                 } else {
                     touchButton(b, down);
                 }
-                // SELECT + START together: Keisho's settings (F10), the way
-                // back to the game list.
-                if (b == TouchOverlay.BTN_BACK) mSelectHeld = down;
-                if (b == TouchOverlay.BTN_START) mStartHeld = down;
-                if (down && mSelectHeld && mStartHeld) {
-                    SDLActivity.onNativeKeyDown(KeyEvent.KEYCODE_F10);
-                    SDLActivity.onNativeKeyUp(KeyEvent.KEYCODE_F10);
-                }
+                // SELECT + START (Resume / Exit Game) and SELECT over the list
+                // (leave the app) are read natively from the virtual pad.
                 return true;
             }
         }

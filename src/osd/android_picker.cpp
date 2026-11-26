@@ -147,8 +147,111 @@ bool pill_button(ImDrawList* list, const char* id, ImVec2 a, ImVec2 b, ImU32 fil
 
 }  // namespace
 
+namespace {
+
+/// A centred dialog in M2EA's colours: a title and big stacked buttons. The
+/// index of the button pressed, or -1. Pad: up / down and A; B is `cancel`.
+int big_dialog(const char* id, const char* title, std::initializer_list<const char*> buttons, int cancel)
+{
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float          H  = vp->WorkSize.y;
+    const float          u  = std::max(0.5f, std::min(H / 591.0f, vp->WorkSize.x / 1100.0f));
+    const ImGuiStyle&    st = ImGui::GetStyle();
+    const float          fs = std::round(26.0f * u);
+    const float          bw = std::round(300.0f * u);
+    const float          bh = std::round(60.0f * u);
+
+    if (!ImGui::IsPopupOpen(id)) {
+        ImGui::OpenPopup(id);
+    }
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + H * 0.5f), ImGuiCond_Always,
+                            ImVec2(0.5f, 0.5f));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImGui::ColorConvertU32ToFloat4(IM_COL32(0x1A, 0x1D, 0x23, 0xF6)));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImGui::ColorConvertU32ToFloat4(kBarEdge));
+    ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, ImVec4(0, 0, 0, 0.55f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, std::round(18.0f * u));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(std::round(28.0f * u), std::round(24.0f * u)));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, std::round(14.0f * u)));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, bh * 0.5f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, std::max(1.0f, u));
+    int pressed = -1;
+    if (ImGui::BeginPopupModal(id, nullptr,
+                               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize
+                                   | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove)) {
+        ImGui::PushFont(nullptr, fs / std::max(0.01f, st.FontScaleMain * st.FontScaleDpi));
+        const float tw = ImGui::CalcTextSize(title).x;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (bw - tw) * 0.5f));
+        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(kOrange), "%s", title);
+        ImGui::Dummy(ImVec2(bw, std::round(4.0f * u)));
+        int i = 0;
+        for (const char* label : buttons) {
+            const bool first = i == 0;
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::ColorConvertU32ToFloat4(first ? kOrange : kButton));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertU32ToFloat4(first ? kOrangeHot : kButtonHot));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::ColorConvertU32ToFloat4(first ? kOrangeHot : kButtonHot));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(first ? kInk : kWhite));
+            if (ImGui::Button(label, ImVec2(bw, bh))) {
+                pressed = i;
+            }
+            if (first && ImGui::IsWindowAppearing()) {
+                ImGui::SetItemDefaultFocus();
+                ImGui::SetKeyboardFocusHere(-1);
+            }
+            ImGui::PopStyleColor(4);
+            ++i;
+        }
+        ImGui::PopFont();
+        if (pressed < 0 && !ImGui::IsWindowAppearing()
+            && (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))) {
+            pressed = cancel;
+        }
+        if (pressed >= 0) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar(5);
+    ImGui::PopStyleColor(3);
+    return pressed;
+}
+
+}  // namespace
+
 void Gui::android_frame_hooks()
 {
+    // SELECT + START in a game: Resume / Exit Game. SELECT over the game list:
+    // leave the app (Yes / No).
+    const bool back_down  = ImGui::IsKeyDown(ImGuiKey_GamepadBack);
+    const bool start_down = ImGui::IsKeyDown(ImGuiKey_GamepadStart);
+    const bool combo      = (ImGui::IsKeyPressed(ImGuiKey_GamepadBack, false) && start_down)
+                       || (ImGui::IsKeyPressed(ImGuiKey_GamepadStart, false) && back_down);
+    const bool in_game = !m_picker_enabled && !m_current_game.empty();
+    if (in_game && !m_visible && combo && !m_android_pause) {
+        m_android_pause = true;
+    } else if (m_android_pause) {
+        const int pick = !in_game ? 0 : big_dialog("##pause", "PAUSE", {"RESUME", "EXIT GAME"}, 0);
+        if (pick == 0) {
+            m_android_pause = false;
+        } else if (pick == 1) {
+            m_android_pause     = false;
+            m_android_exit_game = true;
+        }
+    }
+    if (m_picker_enabled && !m_visible && !m_android_quit_prompt && !m_picker_searching
+        && ImGui::IsKeyPressed(ImGuiKey_GamepadBack, false)) {
+        m_android_quit_prompt = true;
+    } else if (m_android_quit_prompt) {
+        const int pick = big_dialog("##quit", "EXIT TRI-ARCADE?", {"NO", "YES"}, 0);
+        if (pick == 0) {
+            m_android_quit_prompt = false;
+        } else if (pick == 1) {
+            m_android_quit_prompt = false;
+            SDL_Event quit{};
+            quit.type = SDL_EVENT_QUIT;
+            SDL_PushEvent(&quit);
+        }
+    }
+
     // SAVES: the game is running now, open its save states.
     if (m_android_states_after_launch && !m_picker_enabled && !m_current_game.empty()) {
         m_android_states_after_launch = false;
@@ -249,7 +352,7 @@ void Gui::draw_picker_android(Config& config)
     };
     const bool typing = io.WantTextInput;
     bool nav_left = false, nav_right = false, nav_ok = false;
-    if (!typing && !m_load_error.has_value()) {
+    if (!typing && !m_load_error.has_value() && !m_android_quit_prompt) {
         nav_left  = key({ImGuiKey_LeftArrow, ImGuiKey_GamepadDpadLeft, ImGuiKey_GamepadLStickLeft});
         nav_right = key({ImGuiKey_RightArrow, ImGuiKey_GamepadDpadRight, ImGuiKey_GamepadLStickRight});
         nav_ok    = ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)
