@@ -88,6 +88,23 @@ void android_prepare()
 {
     // Deliver Back to the program instead of letting Android close the app.
     SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+    // Arcade monitors are landscape. Without this SDL lets a resizable window
+    // follow the phone into portrait, overriding the manifest.
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+
+    // SDL picks the EGL config again whenever Android recreates the surface
+    // (every return from another app), from the GL attributes current at that
+    // moment. Keisho sets its attributes only when it creates the context,
+    // after the window, so the first surface and the recreated one used
+    // different configs, the context no longer matched and SDL replaced it:
+    // a black screen. Setting the same attributes before the window exists
+    // keeps the config identical across pauses.
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 0);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
     const char* base = SDL_GetAndroidExternalStoragePath();
     if (base == nullptr || base[0] == '\0') {
