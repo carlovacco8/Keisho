@@ -533,6 +533,10 @@ bool Gui::draw(Config& config, const std::vector<std::string>& gpu_names,
         draw_calibration_markers(input);
     }
 
+#if defined(__ANDROID__)
+    touch_scroll();
+#endif
+
     // Full-screen picker when active and Settings is closed; F10 opens Settings
     // on top.
     if (m_picker_enabled && !m_visible) {
@@ -762,8 +766,13 @@ void Gui::draw_menu(Config& config, const std::vector<std::string>& gpu_names, I
         for (const ui::Kit::Tab& tab : tabs) {
             labelled += ImGui::CalcTextSize(tab.label).x + kit.px(14.0f) * 2.0f + kit.px(14.0f) + kit.px(6.0f);
         }
-        const bool compact = labelled > size.x - pad * 2.0f;
-        ImGui::BeginChild("tabs", ImVec2(size.x - pad * 2.0f, kit.px(34.0f) + ring_room), ImGuiChildFlags_NavFlattened,
+#if defined(__ANDROID__)
+        const float close_w = kit.px(34.0f) + kit.px(8.0f);  // the X, top right, and a gap
+#else
+        const float close_w = 0.0f;
+#endif
+        const bool compact = labelled > size.x - pad * 2.0f - close_w;
+        ImGui::BeginChild("tabs", ImVec2(size.x - pad * 2.0f - close_w, kit.px(34.0f) + ring_room), ImGuiChildFlags_NavFlattened,
                           ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ring_room);
         int page = m_page;
@@ -773,6 +782,13 @@ void Gui::draw_menu(Config& config, const std::vector<std::string>& gpu_names, I
         }
         ImGui::EndChild();
     }
+#if defined(__ANDROID__)
+    // X, top right: closes the settings (back to the game list or the game).
+    if (close_button("##close_menu", ImVec2(b.x - pad - kit.px(34.0f), a.y + kit.px(10.0f)), kit.px(34.0f))
+        && !m_popup_open) {
+        m_visible = false;
+    }
+#endif
     // A line under the tabs that fades at its ends.
     {
         const float y  = a.y + kit.px(10.0f) + kit.px(34.0f) + kit.px(4.0f);
@@ -4238,6 +4254,90 @@ void Gui::draw_sinden_border(const Config& config)
 }
 
 // ---------------------------------------------------------------------------
+// Touch: drag to scroll, and the X close button
+// ---------------------------------------------------------------------------
+
+void Gui::touch_scroll()
+{
+    ImGuiContext& g  = *GImGui;
+    ImGuiIO&      io = g.IO;
+    const float   scale     = m_ui_scale > 0.0f ? m_ui_scale : 1.0f;
+    const float   threshold = 10.0f * scale;  // finger movement before it counts as a scroll
+
+    if (io.MouseClicked[0]) {
+        // The window under the finger, or the nearest one around it that scrolls.
+        ImGuiWindow* w = g.HoveredWindow;
+        while (w != nullptr && w->ScrollMax.y <= 0.0f && (w->Flags & ImGuiWindowFlags_ChildWindow) != 0) {
+            w = w->ParentWindow;
+        }
+        m_touch_window   = (w != nullptr && w->ScrollMax.y > 0.0f) ? w->ID : 0;
+        m_touch_dragging = false;
+        m_touch_total_x  = 0.0f;
+        m_touch_total_y  = 0.0f;
+        m_touch_velocity = 0.0f;
+    }
+
+    ImGuiWindow* w = m_touch_window != 0 ? ImGui::FindWindowByID(m_touch_window) : nullptr;
+    if (w == nullptr) {
+        m_touch_window   = 0;
+        m_touch_dragging = false;
+        m_touch_velocity = 0.0f;
+        return;
+    }
+
+    const float dt = io.DeltaTime > 0.0f ? io.DeltaTime : 1.0f / 60.0f;
+    if (io.MouseDown[0]) {
+        const float dy = io.MouseDelta.y;
+        m_touch_total_x += std::fabs(io.MouseDelta.x);
+        m_touch_total_y += dy;
+        if (!m_touch_dragging && std::fabs(m_touch_total_y) > threshold
+            && std::fabs(m_touch_total_y) > m_touch_total_x
+            && g.ActiveId != ImGui::GetWindowScrollbarID(w, ImGuiAxis_Y)) {
+            // From here the finger scrolls: whatever it touched first is let go
+            // without being pressed.
+            m_touch_dragging = true;
+            ImGui::ClearActiveID();
+        }
+        if (m_touch_dragging) {
+            ImGui::SetScrollY(w, std::clamp(w->Scroll.y - dy, 0.0f, w->ScrollMax.y));
+            // Smoothed speed, for the coast after release.
+            m_touch_velocity = m_touch_velocity * 0.6f + (-dy / dt) * 0.4f;
+        }
+        return;
+    }
+
+    // Finger up: coast, slowing down.
+    m_touch_dragging = false;
+    if (std::fabs(m_touch_velocity) < 40.0f * scale) {
+        m_touch_velocity = 0.0f;
+        return;
+    }
+    const float next = std::clamp(w->Scroll.y + m_touch_velocity * dt, 0.0f, w->ScrollMax.y);
+    if (next == 0.0f || next == w->ScrollMax.y) {
+        m_touch_velocity = 0.0f;
+    }
+    ImGui::SetScrollY(w, next);
+    m_touch_velocity *= std::exp(-4.0f * dt);
+}
+
+bool Gui::close_button(const char* id, ImVec2 pos, float size)
+{
+    const ui::Palette& p = *m_palette;
+    ImGui::SetCursorScreenPos(pos);
+    const bool  clicked = ImGui::InvisibleButton(id, ImVec2(size, size));
+    const bool  hot     = ImGui::IsItemHovered() || ImGui::IsItemActive();
+    ImDrawList* list    = ImGui::GetWindowDrawList();
+    const ImVec2 c(pos.x + size * 0.5f, pos.y + size * 0.5f);
+    list->AddCircleFilled(c, size * 0.5f, hot ? p.hover : p.card);
+    list->AddCircle(c, size * 0.5f, p.edge, 0, 1.0f);
+    const float r = size * 0.2f;
+    const float t = std::max(1.5f, size * 0.07f);
+    list->AddLine(ImVec2(c.x - r, c.y - r), ImVec2(c.x + r, c.y + r), p.text, t);
+    list->AddLine(ImVec2(c.x - r, c.y + r), ImVec2(c.x + r, c.y - r), p.text, t);
+    return clicked;
+}
+
+// ---------------------------------------------------------------------------
 // Directory picker (Paths tab "Browse..." buttons)
 // ---------------------------------------------------------------------------
 
@@ -4247,13 +4347,6 @@ void Gui::open_dir_picker(DirPickerTarget target, const std::string& initial)
 
     m_dir_picker_target = target;
 
-#if defined(__ANDROID__)
-    // Android's own folder chooser; its answer arrives in draw(). Devices
-    // without one fall through to the built-in browser below.
-    if (android_open_folder_picker(initial)) {
-        return;
-    }
-#endif
 
     std::error_code ec;
     fs::path        start(initial);
@@ -4322,11 +4415,37 @@ void Gui::draw_dir_picker_popup(Config& config)
         ImGui::OpenPopup(tr_id("Choose Directory"));
     }
 
+#if defined(__ANDROID__)
+    // On a phone or TV the chooser fills the screen, with its own X.
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->WorkPos, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(vp->WorkSize, ImGuiCond_Always);
+    constexpr ImGuiWindowFlags kPickerFlags = ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar
+                                            | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+#else
     ImGui::SetNextWindowSize(ImVec2(520, 420), ImGuiCond_Appearing);
-    if (!ImGui::BeginPopupModal(tr_id("Choose Directory"), nullptr,
-                                ImGuiWindowFlags_NoSavedSettings)) {
+    constexpr ImGuiWindowFlags kPickerFlags = ImGuiWindowFlags_NoSavedSettings;
+#endif
+    if (!ImGui::BeginPopupModal(tr_id("Choose Directory"), nullptr, kPickerFlags)) {
         return;
     }
+#if defined(__ANDROID__)
+    {
+        const float x_size = ImGui::GetFrameHeight() * 1.4f;
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(tr("Choose Directory"));
+        const ImVec2 wpos = ImGui::GetWindowPos();
+        const float  wpad = ImGui::GetStyle().WindowPadding.x;
+        if (close_button("##close_dirs", ImVec2(wpos.x + ImGui::GetWindowWidth() - wpad - x_size, wpos.y + wpad),
+                         x_size)) {
+            m_dir_picker_target = DirPickerTarget::None;
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            return;
+        }
+        ImGui::SetCursorPosY(ImGui::GetStyle().WindowPadding.y + x_size + ImGui::GetStyle().ItemSpacing.y);
+    }
+#endif
 
     char buf[1024];
     std::snprintf(buf, sizeof buf, "%s", m_dir_picker_path.c_str());
@@ -4365,8 +4484,13 @@ void Gui::draw_dir_picker_popup(Config& config)
 
     if (ImGui::BeginChild("##dirlist",
                           ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 2), true)) {
+#if defined(__ANDROID__)
+        const ImVec2 row(0.0f, ImGui::GetFrameHeight() * 1.5f);
+#else
+        const ImVec2 row(0.0f, 0.0f);
+#endif
         for (const auto& name : m_dir_picker_subdirs) {
-            if (ImGui::Selectable(name.c_str())) {
+            if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_None, row)) {
                 m_dir_picker_path = (current / name).string();
                 refresh_dir_picker_entries();
             }

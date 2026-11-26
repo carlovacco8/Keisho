@@ -310,6 +310,11 @@ private:
     [[nodiscard]] bool capturing_input() const;
     void               cancel_captures();
     void draw_dir_picker_popup(Config& config);
+    /// Touch screens: a finger drawn up or down scrolls the list under it
+    /// (with a little momentum), instead of pressing what it started on.
+    void touch_scroll();
+    /// A round X button at `pos` (its top-left), `size` across; true when tapped.
+    bool close_button(const char* id, ImVec2 pos, float size);
     void draw_fps_overlay(float measured_hz, const char* renderer_label);
     void draw_notification();
     void draw_crosshairs(const Config& config, const class Input* input);
@@ -335,6 +340,12 @@ private:
     int         m_page        = 0;     ///< the settings page shown
     int         m_input_page  = 0;     ///< Input page: gamepad, wheel or light gun
     bool        m_popup_open  = false; ///< a popup of the menu was open this frame
+    // touch_scroll(): the window a finger is scrolling, and its state.
+    unsigned    m_touch_window   = 0;
+    bool        m_touch_dragging = false;
+    float       m_touch_total_x  = 0.0f;
+    float       m_touch_total_y  = 0.0f;
+    float       m_touch_velocity = 0.0f;  ///< px/s left to coast after the finger lifts
     ui::NavState m_nav;                ///< where Up/Down focus is among the rows
     // Settings are saved a moment after they change (autosave()).
     std::optional<Config> m_saved_snapshot;
