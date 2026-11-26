@@ -542,10 +542,49 @@ public class LauncherActivity extends Activity {
             selectTab(0);
             return;
         }
-        GameDb.Game g = mShown.get(Math.min(mSelected, mShown.size() - 1));
+        final GameDb.Game g = mShown.get(Math.min(mSelected, mShown.size() - 1));
+        final File auto = autoStateFile(g.name);
+        if (!auto.isFile()) {
+            launch(g, null);
+            return;
+        }
+        String when = java.text.DateFormat.getDateTimeInstance(
+                java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(new java.util.Date(auto.lastModified()));
+        new AlertDialog.Builder(this)
+                .setTitle(g.title)
+                .setMessage("C'è una partita lasciata a metà (" + when + ").")
+                .setPositiveButton("▶  RIPRENDI", (d, w) -> launch(g, auto))
+                .setNegativeButton("NUOVA PARTITA", (d, w) -> launch(g, null))
+                .setNeutralButton("Annulla", null)
+                .show();
+    }
+
+    private void launch(GameDb.Game g, File state) {
         Intent intent = new Intent(this, KeishoActivity.class);
         intent.putExtra("ROM", g.archive.getAbsolutePath());
+        if (state != null) {
+            intent.putExtra(KeishoActivity.EXTRA_STATE, state.getAbsolutePath());
+        }
         startActivity(intent);
+    }
+
+    /** Where Keisho writes the game's "auto" slot: <saves>/states/<set>.auto.kstate. */
+    private File autoStateFile(String set) {
+        mIni = new Ini(Setup.iniFile(this));   // the game may have changed nvram_dir
+        String saves = mIni.get("nvram_dir", "").trim();
+        File savesDir = saves.isEmpty() ? new File(Setup.filesDir(this), "saves") : new File(saves);
+        if (!savesDir.isAbsolute()) {
+            savesDir = new File(Setup.filesDir(this), saves);
+        }
+        File f = new File(new File(savesDir, "states"), set + ".auto.kstate");
+        if (!f.isFile() && saves.isEmpty()) {
+            // Without keisho.ini beside it Keisho uses its XDG data folder under HOME.
+            File xdg = new File(Setup.filesDir(this), ".local/share/keisho/saves/states/" + set + ".auto.kstate");
+            if (xdg.isFile()) {
+                return xdg;
+            }
+        }
+        return f;
     }
 
     // ------------------------------------------------------------------

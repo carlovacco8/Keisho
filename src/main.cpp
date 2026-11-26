@@ -1377,10 +1377,18 @@ int main(int argc, char** argv)
             return 1;
         }
         if (!machine_any->load_state(options.load_state)) {
+#if defined(__ANDROID__)
+            // The launcher's "resume": a state from an older build may no
+            // longer fit, so start the game afresh rather than close the app.
+            SM2_WARN("--load-state: could not load '%s'; starting the game from the beginning",
+                     options.load_state.c_str());
+#else
             SM2_ERROR("--load-state: failed to load '%s'", options.load_state.c_str());
             return 1;
+#endif
+        } else {
+            SM2_INFO("loaded save state '%s'", options.load_state.c_str());
         }
-        SM2_INFO("loaded save state '%s'", options.load_state.c_str());
     }
 
     // -- headless boot test ------------------------------------------------
@@ -2254,6 +2262,26 @@ int main(int argc, char** argv)
             std::string slot;
         };
         std::optional<StateAction> state_action;
+#if defined(__ANDROID__)
+        // Resume where the player left off: the game is written to its "auto"
+        // slot when the app leaves the screen or quits, and the launcher offers
+        // to start from it (--load-state). Called only between frames.
+        const auto android_autosave = [&](const char* why) {
+            if (machine_any == nullptr || !loaded.has_value()) {
+                return;
+            }
+            const std::string path =
+                hw::state_slot_path(options.config.states_dir, loaded->game.name, "auto");
+            async_soft.wait();  // the frame drawing on the other thread finishes first
+            std::error_code ec;
+            std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);
+            if (machine_any->save_state(path)) {
+                SM2_INFO("auto-saved (%s) to %s", why, path.c_str());
+            } else {
+                SM2_WARN("auto-save (%s) to %s failed", why, path.c_str());
+            }
+        };
+#endif
         bool settings_was_visible = gui.visible();  ///< Settings visibility, last frame.
         // What the game list is built from, as it was when the settings opened:
         // the list is rebuilt only when one of these changed there.
@@ -2408,6 +2436,13 @@ int main(int argc, char** argv)
                 }
 
                 switch (event.type) {
+#if defined(__ANDROID__)
+                    case SDL_EVENT_WILL_ENTER_BACKGROUND:
+                        // Save now: SDL stops this thread while the app is in
+                        // the background, and Android may end it there.
+                        android_autosave("background");
+                        break;
+#endif
                     case SDL_EVENT_QUIT:
                         running = false;
                         break;
@@ -3379,6 +3414,10 @@ int main(int argc, char** argv)
                 window.set_title(build_title());
             }
         }
+
+#if defined(__ANDROID__)
+        android_autosave("quit");
+#endif
 
         if (texture_dumper) {
             async_soft.wait();

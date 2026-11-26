@@ -48,6 +48,8 @@ import java.util.List;
 public class KeishoActivity extends SDLActivity implements InputManager.InputDeviceListener {
     private static final String TAG = "Keisho";
     private static final int REQUEST_FOLDER = 4711;
+    /** Intent extra: a save state to resume from (the launcher's "Riprendi"). */
+    static final String EXTRA_STATE = "STATE";
 
     // Implemented in libmain.so (src/osd/android_glue.cpp).
     private static native void nativeFolderPicked(String path);
@@ -317,6 +319,12 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
         args.add(new File(mFilesDir, "keisho.log").getAbsolutePath());
         if (mRom != null) {
             Log.i(TAG, "launching " + mRom);
+            String state = getIntent() != null ? getIntent().getStringExtra(EXTRA_STATE) : null;
+            if (state != null && new File(state).isFile()) {
+                Log.i(TAG, "resuming from " + state);
+                args.add("--load-state");
+                args.add(state);
+            }
             args.add(mRom);
         }
         return args.toArray(new String[0]);

@@ -8,10 +8,15 @@
 // keyboard shortcuts (F6 F7 F10 F8 F9). Touches that miss every control pass
 // through to the game, which takes them as the mouse (aim and fire on gun
 // games).
+//
+// SPOSTA turns on layout editing: every control can then be dragged anywhere,
+// FATTO keeps the layout (per kind of game: driving, gun, 3 or 4 buttons) and
+// PREDEFINITI puts the controls back where they started.
 
 package io.github.carlovacco8.keisho;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
@@ -33,7 +38,7 @@ final class TouchOverlay extends View {
     static final int AXIS_LX = 0, AXIS_LY = 1, AXIS_LT = 4, AXIS_RT = 5;
 
     private enum Kind { STICK, ROUND, PILL }
-    private enum Action { PAD_BUTTON, TRIGGER, KEY, STICK }
+    private enum Action { PAD_BUTTON, TRIGGER, KEY, STICK, EDIT, RESET }
 
     private static final class Control {
         Kind kind;
@@ -45,6 +50,8 @@ final class TouchOverlay extends View {
         float sizeDp;       // radius (round / stick) or height (pill)
         float widthDp;      // pill width
         boolean danger;
+        boolean editOnly;   // shown only while editing the layout
+        float defFx, defFy; // where build() put it
         // runtime
         float cx, cy, r, w, h;
         boolean pressed;
@@ -61,6 +68,10 @@ final class TouchOverlay extends View {
     private final float mScale;
     private final int mAlpha;
     private final String mHint;
+    private String mProfile = "default";   // which saved layout this game uses
+    private boolean mEditing;
+    private Control mEditButton;
+    private float mDragDx, mDragDy;
 
     TouchOverlay(Context context, GameDb.Game game, float scale, int alphaPercent) {
         super(context);
@@ -74,6 +85,68 @@ final class TouchOverlay extends View {
         mSubText.setColor(0xFFE0E0E0);
         mSubText.setTextAlign(Paint.Align.CENTER);
         mHint = build(game);
+        loadLayout();
+    }
+
+    // ------------------------------------------------------------------
+    // Saved layouts
+    // ------------------------------------------------------------------
+
+    private SharedPreferences layoutPrefs() {
+        return getContext().getSharedPreferences("touch_layout", Context.MODE_PRIVATE);
+    }
+
+    private void loadLayout() {
+        SharedPreferences p = layoutPrefs();
+        for (int i = 0; i < mControls.size(); i++) {
+            Control c = mControls.get(i);
+            String key = mProfile + "." + i;
+            if (p.contains(key + ".x") && p.contains(key + ".y")) {
+                c.fx = clamp01(p.getFloat(key + ".x", c.fx));
+                c.fy = clamp01(p.getFloat(key + ".y", c.fy));
+            }
+        }
+    }
+
+    private void saveLayout() {
+        SharedPreferences.Editor e = layoutPrefs().edit();
+        for (int i = 0; i < mControls.size(); i++) {
+            Control c = mControls.get(i);
+            e.putFloat(mProfile + "." + i + ".x", c.fx);
+            e.putFloat(mProfile + "." + i + ".y", c.fy);
+        }
+        e.apply();
+    }
+
+    private void resetLayout() {
+        SharedPreferences.Editor e = layoutPrefs().edit();
+        for (int i = 0; i < mControls.size(); i++) {
+            Control c = mControls.get(i);
+            c.fx = c.defFx;
+            c.fy = c.defFy;
+            e.remove(mProfile + "." + i + ".x");
+            e.remove(mProfile + "." + i + ".y");
+        }
+        e.apply();
+        place(getWidth(), getHeight());
+        invalidate();
+    }
+
+    private static float clamp01(float v) {
+        return Math.max(0.02f, Math.min(0.98f, v));
+    }
+
+    private void setEditing(boolean on) {
+        if (on == mEditing) {
+            return;
+        }
+        releaseAll();
+        mEditing = on;
+        mEditButton.label = on ? "FATTO" : "SPOSTA";
+        if (!on) {
+            saveLayout();
+        }
+        invalidate();
     }
 
     // ------------------------------------------------------------------
@@ -90,6 +163,8 @@ final class TouchOverlay extends View {
         c.sub = sub;
         c.fx = fx;
         c.fy = fy;
+        c.defFx = fx;
+        c.defFy = fy;
         c.sizeDp = sizeDp;
         c.widthDp = widthDp;
         mControls.add(c);
@@ -118,6 +193,8 @@ final class TouchOverlay extends View {
         // Shared: top corners and the bottom row.
         pill(Action.KEY, KeyEvent.KEYCODE_F8, "FPS", 0.085f, 0.085f);
         pill(Action.KEY, KeyEvent.KEYCODE_F10, "MENU", 0.085f, 0.205f);
+        mEditButton = pill(Action.EDIT, 0, "SPOSTA", 0.085f, 0.325f);
+        pill(Action.RESET, 0, "PREDEFINITI", 0.5f, 0.085f).editOnly = true;
         Control exit = pill(Action.KEY, KeyEvent.KEYCODE_F9, "ESCI", 0.915f, 0.085f);
         exit.danger = true;
         pill(Action.PAD_BUTTON, BTN_BACK, "COIN", 0.31f, 0.925f);
@@ -125,6 +202,7 @@ final class TouchOverlay extends View {
         pill(Action.KEY, KeyEvent.KEYCODE_F7, "CARICA", 0.563f, 0.925f);
         pill(Action.PAD_BUTTON, BTN_START, "START", 0.69f, 0.925f);
 
+        mProfile = driving ? "drive" : gun ? "gun" : "btn" + buttons;
         if (gun) {
             return "Tocca lo schermo per mirare e sparare";
         }
@@ -150,6 +228,10 @@ final class TouchOverlay extends View {
 
     @Override
     protected void onSizeChanged(int w, int h, int ow, int oh) {
+        place(w, h);
+    }
+
+    private void place(int w, int h) {
         float density = getResources().getDisplayMetrics().density * mScale;
         for (Control c : mControls) {
             c.cx = c.fx * w;
@@ -175,7 +257,13 @@ final class TouchOverlay extends View {
     protected void onDraw(Canvas canvas) {
         float density = getResources().getDisplayMetrics().density;
         mStroke.setStrokeWidth(2f * density);
+        if (mEditing) {
+            canvas.drawColor(0x55000000);
+        }
         for (Control c : mControls) {
+            if (c.editOnly && !mEditing) {
+                continue;
+            }
             int fill = c.danger ? 0xFFC8473C : (c.pressed ? 0xFF4A505C : 0xFF1C1F26);
             mFill.setColor(fill);
             mFill.setAlpha(c.danger ? mAlpha : Math.min(255, mAlpha * 200 / 255));
@@ -223,7 +311,11 @@ final class TouchOverlay extends View {
                 }
             }
         }
-        if (mHint != null) {
+        if (mEditing) {
+            mSubText.setAlpha(255);
+            canvas.drawText("Trascina i comandi dove vuoi, poi tocca FATTO",
+                    getWidth() / 2f, getHeight() * 0.20f, mSubText);
+        } else if (mHint != null) {
             mSubText.setAlpha(mAlpha);
             canvas.drawText(mHint, getWidth() / 2f, getHeight() * 0.80f, mSubText);
         }
@@ -236,6 +328,9 @@ final class TouchOverlay extends View {
     private int hit(float x, float y) {
         for (int i = 0; i < mControls.size(); i++) {
             Control c = mControls.get(i);
+            if (c.editOnly && !mEditing) {
+                continue;
+            }
             if (c.kind == Kind.PILL) {
                 float slop = c.h * 0.2f;
                 if (Math.abs(x - c.cx) <= c.w / 2 + slop && Math.abs(y - c.cy) <= c.h / 2 + slop) {
@@ -252,8 +347,66 @@ final class TouchOverlay extends View {
         return -1;
     }
 
+    /** Layout editing: one finger drags one control; nothing reaches the game. */
+    private boolean onEditTouch(MotionEvent e) {
+        int index = e.getActionIndex();
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN: {
+                int ci = hit(e.getX(index), e.getY(index));
+                mPointerControl.clear();
+                if (ci < 0) {
+                    return true;
+                }
+                Control c = mControls.get(ci);
+                if (c.action == Action.EDIT) {
+                    setEditing(false);
+                    return true;
+                }
+                if (c.action == Action.RESET) {
+                    resetLayout();
+                    performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+                    return true;
+                }
+                mPointerControl.put(e.getPointerId(index), ci);
+                mDragDx = c.cx - e.getX(index);
+                mDragDy = c.cy - e.getY(index);
+                c.pressed = true;
+                invalidate();
+                return true;
+            }
+            case MotionEvent.ACTION_MOVE: {
+                int ci = mPointerControl.get(e.getPointerId(0), -1);
+                if (ci >= 0 && getWidth() > 0 && getHeight() > 0) {
+                    Control c = mControls.get(ci);
+                    c.fx = clamp01((e.getX(0) + mDragDx) / getWidth());
+                    c.fy = clamp01((e.getY(0) + mDragDy) / getHeight());
+                    c.cx = c.fx * getWidth();
+                    c.cy = c.fy * getHeight();
+                    c.knobX = c.cx;
+                    c.knobY = c.cy;
+                    invalidate();
+                }
+                return true;
+            }
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL: {
+                for (Control c : mControls) {
+                    c.pressed = false;
+                }
+                mPointerControl.clear();
+                invalidate();
+                return true;
+            }
+            default:
+                return true;
+        }
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent e) {
+        if (mEditing) {
+            return onEditTouch(e);
+        }
         int action = e.getActionMasked();
         int index = e.getActionIndex();
         switch (action) {
@@ -300,6 +453,14 @@ final class TouchOverlay extends View {
     }
 
     private void press(Control c, float x, float y) {
+        if (c.action == Action.EDIT) {
+            setEditing(true);
+            performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
+            return;
+        }
+        if (c.action == Action.RESET) {
+            return;
+        }
         c.pressed = true;
         switch (c.action) {
             case STICK:
@@ -322,6 +483,9 @@ final class TouchOverlay extends View {
     private void release(Control c) {
         c.pressed = false;
         switch (c.action) {
+            case EDIT:
+            case RESET:
+                break;
             case STICK:
                 c.knobX = c.cx;
                 c.knobY = c.cy;
