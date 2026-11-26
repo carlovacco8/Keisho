@@ -247,6 +247,7 @@ public:
         std::string year;
         std::string manufacturer;
         std::string description;
+        std::string cover;  ///< A bundled cover image, shown first; empty if none.
 
         /// One uploaded image: its texture and pixel size (size kept so the
         /// tile can letterbox rather than stretch).

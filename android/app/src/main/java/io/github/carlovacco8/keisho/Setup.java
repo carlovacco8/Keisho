@@ -37,6 +37,7 @@ final class Setup {
             AssetManager assets = context.getAssets();
             copyAsset(assets, "games.xml", new File(dir, "games.xml"));
             copyAssetDir(assets, "lang", new File(dir, "lang"));
+            copyCovers(assets, new File(new File(dir, "artwork"), "covers"));
             writeDefaultConfig(context);
         } catch (IOException e) {
             Log.e(TAG, "could not prepare data files", e);
@@ -59,6 +60,30 @@ final class Setup {
             } else {
                 copyAsset(assets, child, new File(target, name));
             }
+        }
+    }
+
+    /** The bundled game covers, into Keisho's artwork folder; only those missing or changed. */
+    private static void copyCovers(AssetManager assets, File target) throws IOException {
+        String[] names = assets.list("covers");
+        if (names == null || names.length == 0) {
+            return;
+        }
+        if (!target.isDirectory() && !target.mkdirs()) {
+            throw new IOException("mkdir " + target);
+        }
+        for (String name : names) {
+            File out = new File(target, name);
+            if (out.isFile()) {
+                try (android.content.res.AssetFileDescriptor fd = assets.openFd("covers/" + name)) {
+                    if (fd.getLength() == out.length()) {
+                        continue;
+                    }
+                } catch (IOException compressed) {
+                    // Stored compressed: no length to compare, so copy it again.
+                }
+            }
+            copyAsset(assets, "covers/" + name, out);
         }
     }
 

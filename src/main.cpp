@@ -759,7 +759,7 @@ struct LoadedMachine {
 /// merged romset keeps every revision in the parent's archive.
 [[nodiscard]] std::optional<std::filesystem::path> find_set_archive(
     const sm2::rom::GameDatabase& database, const sm2::Config& config,
-    const std::string& name)
+    const std::string& name, bool own_archive_only = false)
 {
     const std::filesystem::path dir(rom_dir_for(database, config, name));
     if (dir.empty()) {
@@ -778,6 +778,9 @@ struct LoadedMachine {
     };
     if (std::optional<std::filesystem::path> own = archive_named(name)) {
         return own;
+    }
+    if (own_archive_only) {
+        return std::nullopt;
     }
     const sm2::rom::GameSpec* game = database.find(name);
     if (game == nullptr || game->parent.empty()) {
@@ -2040,11 +2043,29 @@ int main(int argc, char** argv)
             // its own <name>.zip / .7z, or, for a clone, its parent's merged one.
             std::vector<osd::Gui::PickerEntry> entries;
             std::vector<osd::Scraper::Entry>   scrape_list;
+            // Only the sets that have their own archive in the folder: a clone
+            // whose chips sit in its parent's merged archive is not listed.
+            const std::filesystem::path covers =
+                std::filesystem::path(options.config.artwork_dir) / "covers";
+            const auto cover_for = [&covers](const std::string& set) -> std::string {
+                for (const char* ext : {".jpg", ".png"}) {
+                    std::error_code ec;
+                    const std::filesystem::path candidate = covers / (set + ext);
+                    if (std::filesystem::is_regular_file(candidate, ec)) {
+                        return candidate.string();
+                    }
+                }
+                return {};
+            };
             for (const rom::GameSpec& game : database.games()) {
-                if (!find_set_archive(database, options.config, game.name).has_value()) {
+                if (!find_set_archive(database, options.config, game.name, true).has_value()) {
                     continue;
                 }
                 osd::Gui::PickerEntry entry;
+                entry.cover  = cover_for(game.name);
+                if (entry.cover.empty() && !game.parent.empty()) {
+                    entry.cover = cover_for(game.parent);  // a clone shows its parent's cover
+                }
                 entry.name   = game.name;
                 entry.title  = game.title;
                 entry.system = game.board == rom::Board::Model1 ? "Model 1"

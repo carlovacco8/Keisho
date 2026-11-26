@@ -151,6 +151,7 @@ jobs:
           ls -la android/app/jniLibs/arm64-v8a
           cp data/games.xml android/app/assets/
           cp -r data/lang android/app/assets/
+          cp -r android/covers android/app/assets/covers
 
       - uses: gradle/actions/setup-gradle@v4
         if: steps.decide.outputs.build == 'true'

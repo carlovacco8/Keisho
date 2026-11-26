@@ -4992,7 +4992,12 @@ void Gui::draw_picker(Config& config)
         }
         if (entry.art_state == PickerEntry::Art::Unknown && m_picker_backend != nullptr && m_picker_scraper != nullptr) {
             const Scraper::Metadata meta = m_picker_scraper->load_metadata(entry.name, entry.title);
-            for (const std::string& image_path : meta.image_paths) {
+            std::vector<std::string> images;
+            if (!entry.cover.empty()) {
+                images.push_back(entry.cover);
+            }
+            images.insert(images.end(), meta.image_paths.begin(), meta.image_paths.end());
+            for (const std::string& image_path : images) {
                 int                        iw = 0;
                 int                        ih = 0;
                 std::vector<unsigned char> rgba;
