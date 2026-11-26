@@ -23,6 +23,13 @@ void android_prepare();
 /// which opens and closes Keisho's settings overlay.
 void android_translate_event(SDL_Event* event);
 
+/// The smallest overlay scale that keeps text readable on this device, in
+/// the overlay's own units (it multiplies a 13 px font measured in ImGui
+/// display units; framebuffer_scale converts those to physical pixels).
+/// Phones get text about 16 dp tall, tablets a little less; TVs return 0,
+/// keeping Keisho's own fit-to-screen size.
+[[nodiscard]] float android_min_ui_scale(float framebuffer_scale);
+
 }  // namespace sm2::osd
 
 #endif  // __ANDROID__

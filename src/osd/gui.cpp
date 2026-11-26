@@ -21,6 +21,9 @@
 #include "osd/input.h"
 #include "osd/scraper.h"
 #include "osd/ui_text.h"
+#if defined(__ANDROID__)
+#  include "osd/android_glue.h"
+#endif
 #include "render/geometry.h"
 
 #include "assets/pad_xbox_outline.h"
@@ -406,6 +409,11 @@ void Gui::apply_scale()
     const float    fb = io.DisplayFramebufferScale.y > 0.0f ? io.DisplayFramebufferScale.y : 1.0f;
     float          scale = std::min(sx, sy);
     scale                = std::clamp(scale, std::clamp(1.0f / fb, 0.5f, 1.0f), 4.0f);
+#if defined(__ANDROID__)
+    // On a phone the fit-to-screen size leaves text a millimetre tall; size it
+    // by the screen's density instead (the overlay scrolls when it overflows).
+    scale = std::clamp(std::max(scale, android_min_ui_scale(fb)), 0.5f, 4.0f);
+#endif
 
     // Rescale from a base-style snapshot, since ScaleAllSizes is cumulative.
     if (scale != m_ui_scale) {

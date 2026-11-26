@@ -42,6 +42,21 @@ void android_translate_event(SDL_Event* event)
     }
 }
 
+float android_min_ui_scale(float framebuffer_scale)
+{
+    if (SDL_IsTV()) {
+        return 0.0f;
+    }
+    // Android's density: 1.0 = 160 dpi, phones are typically 2.6-3.5.
+    float density = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
+    if (!(density > 0.0f)) {
+        density = 1.0f;
+    }
+    const float dp_factor = SDL_IsTablet() ? 1.0f : 1.25f;
+    const float fb        = framebuffer_scale > 0.0f ? framebuffer_scale : 1.0f;
+    return density * dp_factor / fb;
+}
+
 }  // namespace sm2::osd
 
 #endif  // __ANDROID__
