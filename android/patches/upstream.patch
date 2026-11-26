@@ -64,7 +64,7 @@ index f8c172e..3ed079d 100644
  else()
      find_package(PkgConfig QUIET)
 diff --git a/data/games.xml b/data/games.xml
-index 9870317..7c12cce 100644
+index 9870317..4c2cd0c 100644
 --- a/data/games.xml
 +++ b/data/games.xml
 @@ -1112,7 +1112,7 @@
@@ -139,6 +139,15 @@ index 9870317..7c12cce 100644
          <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
        </region>
        <region name="m1audio:sndcpu" size="0xc0000" stride="2" chunk="2" byte_swap="true">
+@@ -4923,7 +4923,7 @@
+         <file name="mpr-17754.28" offset="0x000000" crc="0x81a84f67"/>
+         <file name="mpr-17755.29" offset="0x000002" crc="0x2a6e7da4"/>
+       </region>
+-      <region name="drivecpu" size="0x10000">
++      <region name="drivecpu" size="0x10000" required="false">
+         <file name="epr-17891.ic12" offset="0x000000" crc="0x9a33b437"/>
+       </region>
+       <region name="polygons" size="0x2000000" stride="4" chunk="2">
 @@ -4936,7 +4936,7 @@
          <file name="mpr-17753.25" offset="0x000000" crc="0x6db0eb36"/>
          <file name="mpr-17752.24" offset="0x000002" crc="0xd6aa86ce"/>
@@ -148,6 +157,15 @@ index 9870317..7c12cce 100644
          <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
        </region>
        <region name="audiocpu" size="0x80000" stride="2" chunk="2" byte_swap="true">
+@@ -5001,7 +5001,7 @@
+         <file name="mpr-17754.28" offset="0x000000" crc="0x81a84f67"/>
+         <file name="mpr-17755.29" offset="0x000002" crc="0x2a6e7da4"/>
+       </region>
+-      <region name="drivecpu" size="0x10000">
++      <region name="drivecpu" size="0x10000" required="false">
+         <file name="epr-17891.ic12" offset="0x000000" crc="0x9a33b437"/>
+       </region>
+       <region name="polygons" size="0x2000000" stride="4" chunk="2">
 @@ -5014,7 +5014,7 @@
          <file name="mpr-17753.25" offset="0x000000" crc="0x6db0eb36"/>
          <file name="mpr-17752.24" offset="0x000002" crc="0xd6aa86ce"/>
@@ -157,6 +175,15 @@ index 9870317..7c12cce 100644
          <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
        </region>
        <region name="audiocpu" size="0x80000" stride="2" chunk="2" byte_swap="true">
+@@ -5074,7 +5074,7 @@
+         <file name="mpr-17754.28" offset="0x000000" crc="0x81a84f67"/>
+         <file name="mpr-17755.29" offset="0x000002" crc="0x2a6e7da4"/>
+       </region>
+-      <region name="drivecpu" size="0x10000">
++      <region name="drivecpu" size="0x10000" required="false">
+         <file name="epr-17891.ic12" offset="0x000000" crc="0x9a33b437"/>
+       </region>
+       <region name="polygons" size="0x2000000" stride="4" chunk="2">
 @@ -5087,7 +5087,7 @@
          <file name="mpr-17753.25" offset="0x000000" crc="0x6db0eb36"/>
          <file name="mpr-17752.24" offset="0x000002" crc="0xd6aa86ce"/>
@@ -166,6 +193,15 @@ index 9870317..7c12cce 100644
          <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
        </region>
        <region name="audiocpu" size="0x80000" stride="2" chunk="2" byte_swap="true">
+@@ -5147,7 +5147,7 @@
+         <file name="mpr-17754.28" offset="0x000000" crc="0x81a84f67"/>
+         <file name="mpr-17755.29" offset="0x000002" crc="0x2a6e7da4"/>
+       </region>
+-      <region name="drivecpu" size="0x10000">
++      <region name="drivecpu" size="0x10000" required="false">
+         <file name="epr-17182.ic12" offset="0x000000" crc="0x08d3db42"/>
+       </region>
+       <region name="polygons" size="0x2000000" stride="4" chunk="2">
 @@ -5160,7 +5160,7 @@
          <file name="mpr-17753.25" offset="0x000000" crc="0x6db0eb36"/>
          <file name="mpr-17752.24" offset="0x000002" crc="0xd6aa86ce"/>
@@ -175,6 +211,15 @@ index 9870317..7c12cce 100644
          <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
        </region>
        <region name="audiocpu" size="0x80000" stride="2" chunk="2" byte_swap="true">
+@@ -5218,7 +5218,7 @@
+         <file name="mpr-17754.28" offset="0x000000" crc="0x81a84f67"/>
+         <file name="mpr-17755.29" offset="0x000002" crc="0x2a6e7da4"/>
+       </region>
+-      <region name="drivecpu" size="0x10000">
++      <region name="drivecpu" size="0x10000" required="false">
+         <file name="epr-17182.ic12" offset="0x000000" crc="0x08d3db42"/>
+       </region>
+       <region name="polygons" size="0x2000000" stride="4" chunk="2">
 @@ -5231,7 +5231,7 @@
          <file name="mpr-17753.25" offset="0x000000" crc="0x6db0eb36"/>
          <file name="mpr-17752.24" offset="0x000002" crc="0xd6aa86ce"/>
@@ -747,3 +792,37 @@ index 36e43c7..4bd1f0d 100644
      ui::NavState m_nav;                ///< where Up/Down focus is among the rows
      // Settings are saved a moment after they change (autosave()).
      std::optional<Config> m_saved_snapshot;
+diff --git a/src/rom/rom_loader.cpp b/src/rom/rom_loader.cpp
+index 0b791ce..89e6232 100644
+--- a/src/rom/rom_loader.cpp
++++ b/src/rom/rom_loader.cpp
+@@ -820,6 +820,7 @@ std::optional<LoadResult> RomLoader::load(const GameDatabase& database,
+     // Collect every missing required chip before giving up, so one run lists
+     // them all. Optional absences only warn.
+     u32 required_missing = 0;
++    bool device_missing  = false;  // the I/O board firmware, kept in a device set
+ 
+     for (const RegionSpec& region : chosen->regions) {
+         std::vector<std::vector<u8>> contents(region.files.size());
+@@ -843,6 +844,7 @@ std::optional<LoadResult> RomLoader::load(const GameDatabase& database,
+                                   file.crc32);
+                     failure.missing.emplace_back(line);
+                     ++required_missing;
++                    device_missing = device_missing || region.name == "ioboard";
+                 } else {
+                     ++optional_missing;
+                 }
+@@ -893,7 +895,12 @@ std::optional<LoadResult> RomLoader::load(const GameDatabase& database,
+         failure.message = std::to_string(required_missing)
+                         + (required_missing == 1 ? " required ROM file is" : " required ROM files are")
+                         + " missing or do not match.";
+-        if (!chosen->parent.empty()) {
++        if (device_missing && !chosen->device_sets.empty()) {
++            // MAME keeps the I/O board's program in its own set (model1io.zip)
++            // rather than in each game's archive.
++            failure.message += " The I/O board program is in " + chosen->device_sets.front()
++                             + ".zip (or .7z), which must be in the same folder.";
++        } else if (!chosen->parent.empty()) {
+             failure.message += " This set is a clone, so " + chosen->parent
+                              + ".zip or .7z must be in the same folder.";
+         }

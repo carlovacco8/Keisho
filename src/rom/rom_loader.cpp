@@ -820,6 +820,7 @@ std::optional<LoadResult> RomLoader::load(const GameDatabase& database,
     // Collect every missing required chip before giving up, so one run lists
     // them all. Optional absences only warn.
     u32 required_missing = 0;
+    bool device_missing  = false;  // the I/O board firmware, kept in a device set
 
     for (const RegionSpec& region : chosen->regions) {
         std::vector<std::vector<u8>> contents(region.files.size());
@@ -843,6 +844,7 @@ std::optional<LoadResult> RomLoader::load(const GameDatabase& database,
                                   file.crc32);
                     failure.missing.emplace_back(line);
                     ++required_missing;
+                    device_missing = device_missing || region.name == "ioboard";
                 } else {
                     ++optional_missing;
                 }
@@ -893,7 +895,12 @@ std::optional<LoadResult> RomLoader::load(const GameDatabase& database,
         failure.message = std::to_string(required_missing)
                         + (required_missing == 1 ? " required ROM file is" : " required ROM files are")
                         + " missing or do not match.";
-        if (!chosen->parent.empty()) {
+        if (device_missing && !chosen->device_sets.empty()) {
+            // MAME keeps the I/O board's program in its own set (model1io.zip)
+            // rather than in each game's archive.
+            failure.message += " The I/O board program is in " + chosen->device_sets.front()
+                             + ".zip (or .7z), which must be in the same folder.";
+        } else if (!chosen->parent.empty()) {
             failure.message += " This set is a clone, so " + chosen->parent
                              + ".zip or .7z must be in the same folder.";
         }

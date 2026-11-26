@@ -4923,7 +4923,7 @@
         <file name="mpr-17754.28" offset="0x000000" crc="0x81a84f67"/>
         <file name="mpr-17755.29" offset="0x000002" crc="0x2a6e7da4"/>
       </region>
-      <region name="drivecpu" size="0x10000">
+      <region name="drivecpu" size="0x10000" required="false">
         <file name="epr-17891.ic12" offset="0x000000" crc="0x9a33b437"/>
       </region>
       <region name="polygons" size="0x2000000" stride="4" chunk="2">
@@ -5001,7 +5001,7 @@
         <file name="mpr-17754.28" offset="0x000000" crc="0x81a84f67"/>
         <file name="mpr-17755.29" offset="0x000002" crc="0x2a6e7da4"/>
       </region>
-      <region name="drivecpu" size="0x10000">
+      <region name="drivecpu" size="0x10000" required="false">
         <file name="epr-17891.ic12" offset="0x000000" crc="0x9a33b437"/>
       </region>
       <region name="polygons" size="0x2000000" stride="4" chunk="2">
@@ -5074,7 +5074,7 @@
         <file name="mpr-17754.28" offset="0x000000" crc="0x81a84f67"/>
         <file name="mpr-17755.29" offset="0x000002" crc="0x2a6e7da4"/>
       </region>
-      <region name="drivecpu" size="0x10000">
+      <region name="drivecpu" size="0x10000" required="false">
         <file name="epr-17891.ic12" offset="0x000000" crc="0x9a33b437"/>
       </region>
       <region name="polygons" size="0x2000000" stride="4" chunk="2">
@@ -5147,7 +5147,7 @@
         <file name="mpr-17754.28" offset="0x000000" crc="0x81a84f67"/>
         <file name="mpr-17755.29" offset="0x000002" crc="0x2a6e7da4"/>
       </region>
-      <region name="drivecpu" size="0x10000">
+      <region name="drivecpu" size="0x10000" required="false">
         <file name="epr-17182.ic12" offset="0x000000" crc="0x08d3db42"/>
       </region>
       <region name="polygons" size="0x2000000" stride="4" chunk="2">
@@ -5218,7 +5218,7 @@
         <file name="mpr-17754.28" offset="0x000000" crc="0x81a84f67"/>
         <file name="mpr-17755.29" offset="0x000002" crc="0x2a6e7da4"/>
       </region>
-      <region name="drivecpu" size="0x10000">
+      <region name="drivecpu" size="0x10000" required="false">
         <file name="epr-17182.ic12" offset="0x000000" crc="0x08d3db42"/>
       </region>
       <region name="polygons" size="0x2000000" stride="4" chunk="2">
