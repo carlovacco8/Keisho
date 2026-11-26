@@ -475,7 +475,8 @@ if(SM2_PLATFORM_ANDROID)
         main.cpp
     )
     set_target_properties(keisho PROPERTIES OUTPUT_NAME "main")
-    target_link_libraries(keisho PRIVATE android log)
+    # ImGui's GLES3 backend calls GL directly on Android rather than loading it.
+    target_link_libraries(keisho PRIVATE android log GLESv3 EGL)
 else()
     add_executable(keisho
         main.cpp
