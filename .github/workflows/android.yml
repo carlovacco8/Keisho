@@ -1,6 +1,6 @@
 name: Android
 
-# Builds TRI-ARCADE, the Android / Android TV APK (arm64-v8a), from upstream
+# Builds M2 NEXUS, the Android / Android TV APK (arm64-v8a), from upstream
 # Keisho (Keisho-Emu/Keisho) frozen at UPSTREAM_REF, with this branch's Android
 # port laid over it (android/scripts/prepare-upstream.sh).
 #
@@ -170,7 +170,7 @@ jobs:
         run: |
           gradle -p android assembleRelease --stacktrace
           mkdir -p ../out
-          cp android/app/build/outputs/apk/release/app-release.apk ../out/TRI-ARCADE.apk
+          cp android/app/build/outputs/apk/release/app-release.apk ../out/M2NEXUS.apk
           ls -la ../out
 
       - name: Write version.json
@@ -198,20 +198,20 @@ jobs:
               "date": datetime.date.today().isoformat(),
               "upstream_sha": os.environ["UP_SHA"],
               "port_sha": os.environ["PORT_SHA"],
-              "apk": os.environ["RELEASE_BASE"] + "/TRI-ARCADE.apk",
+              "apk": os.environ["RELEASE_BASE"] + "/M2NEXUS.apk",
               "changes": "\n".join(text),
           }
           with open("out/version.json", "w", encoding="utf-8") as f:
               json.dump(data, f, ensure_ascii=False, indent=2)
           with open("out/notes.md", "w", encoding="utf-8") as f:
-              f.write("TRI-ARCADE per Android TV e cellulare (arm64).\n\n```\n" + data["changes"] + "\n```\n")
+              f.write("M2 NEXUS per Android TV e cellulare (arm64).\n\n```\n" + data["changes"] + "\n```\n")
           print(json.dumps(data, ensure_ascii=False, indent=2))
           PY
 
       - uses: actions/upload-artifact@v4
         if: steps.decide.outputs.build == 'true'
         with:
-          name: TRI-ARCADE
+          name: M2NEXUS
           path: out/
 
       - name: Publish android-latest pre-release
@@ -222,8 +222,8 @@ jobs:
         run: |
           gh release delete android-latest --yes --cleanup-tag || true
           gh release create android-latest \
-            ../out/TRI-ARCADE.apk ../out/version.json \
+            ../out/M2NEXUS.apk ../out/version.json \
             --target "${{ steps.decide.outputs.port_sha }}" \
             --prerelease \
-            --title "TRI-ARCADE (build ${{ github.run_number }})" \
+            --title "M2 NEXUS (build ${{ github.run_number }})" \
             --notes-file ../out/notes.md

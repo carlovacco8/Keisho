@@ -277,7 +277,7 @@ index 86a9858..3274dea 100644
      install(TARGETS keisho RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
      install(FILES "${CMAKE_SOURCE_DIR}/data/games.xml"
 diff --git a/src/main.cpp b/src/main.cpp
-index b4e37dc..3edffa4 100644
+index b4e37dc..f905c20 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -61,6 +61,16 @@
@@ -321,11 +321,11 @@ index b4e37dc..3edffa4 100644
          return std::nullopt;
      }
 +#if defined(__ANDROID__)
-+    // TRI-ARCADE on Android plays Sega Model 2 only.
++    // M2 NEXUS on Android plays Sega Model 2 only.
 +    if (result->game.board == rom::Board::Model1 || result->game.board == rom::Board::Model3) {
 +        if (error != nullptr) {
 +            error->game    = result->game.name;
-+            error->message = "TRI-ARCADE plays Sega Model 2 games only.";
++            error->message = "M2 NEXUS plays Sega Model 2 games only.";
 +        }
 +        SM2_WARN("%s is not a Model 2 game; not started", result->game.name.c_str());
 +        return std::nullopt;
@@ -845,7 +845,7 @@ index 720a708..7137b60 100644
  
  }  // namespace sm2::osd
 diff --git a/src/osd/gui.cpp b/src/osd/gui.cpp
-index dd63b58..fc35c4f 100644
+index dd63b58..1fb24e0 100644
 --- a/src/osd/gui.cpp
 +++ b/src/osd/gui.cpp
 @@ -21,6 +21,9 @@
@@ -1005,7 +1005,7 @@ index dd63b58..fc35c4f 100644
  
      kit.begin_group(tr("Games"));
 +#if defined(__ANDROID__)
-+    // TRI-ARCADE on Android plays Model 2 only: one folder.
++    // M2 NEXUS on Android plays Model 2 only: one folder.
 +    dir_row(tr("Model 2 ROM folder"), tr("One zip or 7z per game, named as in MAME."), config.model2_rom_dir,
 +            DirPickerTarget::Model2RomDir, tr("Where the Model 2 ROM archives live."), tr("not set"));
 +#else
@@ -1025,7 +1025,7 @@ index dd63b58..fc35c4f 100644
          const ImVec2 at   = ImGui::GetCursorScreenPos();
          const float  big  = ImGui::GetFontSize() * 2.0f;
 +#if defined(__ANDROID__)
-+        list->AddText(ImGui::GetFont(), big, at, kit.palette().accent, "TRI-ARCADE");
++        list->AddText(ImGui::GetFont(), big, at, kit.palette().accent, "M2 NEXUS");
 +#else
          list->AddText(ImGui::GetFont(), big, at, kit.palette().accent, "KEISHO");
 +#endif
@@ -1041,7 +1041,7 @@ index dd63b58..fc35c4f 100644
 +    // About screen and links to Keisho. Plain strings: never renamed.
 +    kit.begin_group("Based on Keisho");
 +    kit.paragraph(nullptr,
-+                  "TRI-ARCADE is a modified version of Keisho, the Sega Model 1, 2 & 3 arcade emulator "
++                  "M2 NEXUS is a modified version of Keisho, the Sega Model 1, 2 & 3 arcade emulator "
 +                  "by Daniel Martin (dmanlfc) and the Keisho contributors.");
 +    {
 +        const char* url = "https://github.com/Keisho-Emu/Keisho";
@@ -1353,7 +1353,7 @@ index 36e43c7..08ab67d 100644
      // Settings are saved a moment after they change (autosave()).
      std::optional<Config> m_saved_snapshot;
 diff --git a/src/osd/i18n.cpp b/src/osd/i18n.cpp
-index af257a3..8242ced 100644
+index af257a3..d398c21 100644
 --- a/src/osd/i18n.cpp
 +++ b/src/osd/i18n.cpp
 @@ -926,15 +926,35 @@ std::string shape(std::string_view text)
@@ -1361,12 +1361,12 @@ index af257a3..8242ced 100644
  }
  
 +#if defined(__ANDROID__)
-+// The Android build is TRI-ARCADE: the name it shows wherever the text said
++// The Android build is M2 NEXUS: the name it shows wherever the text said
 +// Keisho (the About page still credits Keisho, as its licence asks).
 +static std::string rebrand(std::string text)
 +{
 +    static constexpr std::string_view kFrom = "Keisho";
-+    static constexpr std::string_view kTo   = "TRI-ARCADE";
++    static constexpr std::string_view kTo   = "M2 NEXUS";
 +    for (size_t at = text.find(kFrom); at != std::string::npos; at = text.find(kFrom, at + kTo.size())) {
 +        text.replace(at, kFrom.size(), kTo);
 +    }

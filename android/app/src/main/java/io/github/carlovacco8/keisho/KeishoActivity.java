@@ -414,11 +414,11 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
         final File from = Setup.filesDir(this);
         new Thread(() -> {
             try {
-                File to = new File(Environment.getExternalStorageDirectory(), "TRI-ARCADE/log");
+                File to = new File(Environment.getExternalStorageDirectory(), "M2NEXUS/log");
                 if (!to.isDirectory() && !to.mkdirs()) {
                     return;
                 }
-                String[][] names = { { "keisho.log", "tri-arcade.log" }, { "android.log", "android.log" } };
+                String[][] names = { { "keisho.log", "m2nexus.log" }, { "android.log", "android.log" } };
                 for (String[] name : names) {
                     File src = new File(from, name[0]);
                     if (src.isFile()) {
@@ -589,7 +589,7 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
 
     private void requestStorageAccess() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Toast.makeText(this, "TRI-ARCADE: consenti l'accesso a tutti i file, poi riapri il gioco",
+            Toast.makeText(this, "M2 NEXUS: consenti l'accesso a tutti i file, poi riapri il gioco",
                     Toast.LENGTH_LONG).show();
             try {
                 startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,

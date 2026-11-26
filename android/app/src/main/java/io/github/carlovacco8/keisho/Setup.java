@@ -107,7 +107,7 @@ final class Setup {
             return;
         }
         File roms = findRomsRoot();
-        String text = "# TRI-ARCADE settings (Android defaults; edit freely)\n"
+        String text = "# M2 NEXUS settings (Android defaults; edit freely)\n"
                 + "\n[video]\n"
                 + "fullscreen = true\n"
                 + "\n[paths]\n"

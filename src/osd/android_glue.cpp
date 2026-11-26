@@ -444,7 +444,7 @@ Java_io_github_carlovacco8_keisho_KeishoActivity_nativeTouchAttach(JNIEnv*, jcla
     desc.type     = SDL_JOYSTICK_TYPE_GAMEPAD;
     desc.naxes    = SDL_GAMEPAD_AXIS_COUNT;           // sticks + both triggers
     desc.nbuttons = SDL_GAMEPAD_BUTTON_DPAD_RIGHT + 1; // A..d-pad, in SDL order
-    desc.name      = "TRI-ARCADE pad";
+    desc.name      = "M2 NEXUS pad";
     desc.vendor_id  = 0x1209;  // the one pad SDL is let see (see android_prepare)
     desc.product_id = 0x7472;
     const SDL_JoystickID id = SDL_AttachVirtualJoystick(&desc);

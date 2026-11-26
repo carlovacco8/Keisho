@@ -34,7 +34,7 @@ public class KeishoApp extends Application {
             try {
                 StringWriter text = new StringWriter();
                 PrintWriter out = new PrintWriter(text);
-                out.println("TRI-ARCADE build " + versionName());
+                out.println("M2 NEXUS build " + versionName());
                 out.println("Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + "), "
                         + Build.MANUFACTURER + " " + Build.MODEL);
                 out.println("Thread: " + thread.getName());
@@ -71,7 +71,7 @@ public class KeishoApp extends Application {
             return;
         }
         new AlertDialog.Builder(activity)
-                .setTitle("TRI-ARCADE si è chiuso per un errore: fai uno screenshot")
+                .setTitle("M2 NEXUS si è chiuso per un errore: fai uno screenshot")
                 .setMessage(text)
                 .setPositiveButton("OK", null)
                 .show();
