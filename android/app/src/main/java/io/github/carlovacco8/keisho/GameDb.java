@@ -78,8 +78,18 @@ final class GameDb {
     static GameDb load(Context context) {
         GameDb db = new GameDb();
         try (InputStream in = context.getAssets().open("games.xml")) {
+            // Keisho's own reader (pugixml) accepts "--" inside its comments;
+            // Android's strict parser stops there and the list came out empty,
+            // so every game got the generic touch layout. Drop the comments.
+            java.io.ByteArrayOutputStream raw = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[65536];
+            for (int n; (n = in.read(buf)) > 0; ) {
+                raw.write(buf, 0, n);
+            }
+            String xml = new String(raw.toByteArray(), java.nio.charset.StandardCharsets.UTF_8)
+                    .replaceAll("(?s)<!--.*?-->", "");
             XmlPullParser p = Xml.newPullParser();
-            p.setInput(in, "UTF-8");
+            p.setInput(new java.io.StringReader(xml));
             Game current = null;
             String text = null;
             for (int e = p.getEventType(); e != XmlPullParser.END_DOCUMENT; e = p.next()) {
@@ -116,8 +126,16 @@ final class GameDb {
                     text = null;
                 }
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
             // An unreadable database just means an empty list.
+            android.util.Log.w("Keisho", "games.xml could not be read", e);
+        }
+        // A clone that lists no inputs uses its parent's (vf2o, zerogunaj...).
+        for (Game g : db.mGames.values()) {
+            Game parent = g.inputs.isEmpty() && !g.parent.isEmpty() ? db.mGames.get(g.parent) : null;
+            if (parent != null) {
+                g.inputs.addAll(parent.inputs);
+            }
         }
         return db;
     }
