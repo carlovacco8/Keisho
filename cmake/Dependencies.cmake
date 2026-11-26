@@ -67,12 +67,19 @@ endif()
 
 # glslc compiles GLSL to SPIR-V at build time. Prefer the one shipped beside
 # the loader, then anything on PATH.
+# The Android NDK ships glslc under shader-tools/<host>/.
+set(SM2_NDK_GLSLC_HINTS)
+if(ANDROID AND DEFINED ANDROID_NDK)
+    file(GLOB SM2_NDK_GLSLC_HINTS "${ANDROID_NDK}/shader-tools/*")
+endif()
 find_program(SM2_GLSLC
     NAMES glslc
     HINTS
         "$ENV{VULKAN_SDK}/bin"
         "${Vulkan_INCLUDE_DIR}/../bin"
+        ${SM2_NDK_GLSLC_HINTS}
     DOC "glslc GLSL-to-SPIR-V compiler"
+    NO_CMAKE_FIND_ROOT_PATH
 )
 
 if(NOT SM2_GLSLC)
@@ -105,8 +112,14 @@ else()
 
     # Trim the build to what the emulator actually uses. SDL's own tests and
     # the shared library are pure overhead here.
-    set(SDL_SHARED        OFF CACHE BOOL "" FORCE)
-    set(SDL_STATIC        ON  CACHE BOOL "" FORCE)
+    if(ANDROID)
+        # SDLActivity loads libSDL3.so and then libmain.so, so SDL is shared here.
+        set(SDL_SHARED    ON  CACHE BOOL "" FORCE)
+        set(SDL_STATIC    OFF CACHE BOOL "" FORCE)
+    else()
+        set(SDL_SHARED    OFF CACHE BOOL "" FORCE)
+        set(SDL_STATIC    ON  CACHE BOOL "" FORCE)
+    endif()
     set(SDL_TEST_LIBRARY  OFF CACHE BOOL "" FORCE)
     set(SDL_EXAMPLES      OFF CACHE BOOL "" FORCE)
     set(SDL_INSTALL       OFF CACHE BOOL "" FORCE)
@@ -505,7 +518,7 @@ endif()
 # ImGui does not do. HarfBuzz is static on Windows and macOS so the packages
 # carry no extra library; SheenBidi is rarely packaged, so always vendored.
 
-if(WIN32 OR APPLE)
+if(WIN32 OR APPLE OR ANDROID)
     set(harfbuzz_FOUND FALSE)
 else()
     find_package(PkgConfig QUIET)

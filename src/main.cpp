@@ -61,6 +61,11 @@
 #include <memory>
 
 #include <SDL3/SDL.h>
+#if defined(__ANDROID__)
+// Renames main() to SDL_main(), the entry point SDLActivity calls.
+#  include <SDL3/SDL_main.h>
+#  include "osd/android_glue.h"
+#endif
 
 #include <imgui_impl_sdl3.h>
 
@@ -925,6 +930,10 @@ sm2::Config persisted_config(const sm2::Config& current, const Options& options,
 int main(int argc, char** argv)
 {
     using namespace sm2;
+
+#if defined(__ANDROID__)
+    sm2::osd::android_prepare();
+#endif
 
 #if defined(_WIN32)
     attach_windows_console();
@@ -2385,6 +2394,9 @@ int main(int argc, char** argv)
 
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
+#if defined(__ANDROID__)
+                sm2::osd::android_translate_event(&event);
+#endif
                 // Let ImGui see every event, bar a key the System tab is
                 // binding, which its keyboard navigation would also press.
                 if (event.type != SDL_EVENT_KEY_DOWN || !gui.visible() || !gui.capturing_key()) {

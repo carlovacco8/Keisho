@@ -396,6 +396,9 @@ add_library(sm2_osd STATIC
     osd/wheel_ffb.cpp
     osd/window.cpp
 )
+if(SM2_PLATFORM_ANDROID)
+    target_sources(sm2_osd PRIVATE osd/android_glue.cpp)
+endif()
 # The host's application menu: a "Settings..." item on macOS, nothing elsewhere.
 if(SM2_PLATFORM_MACOS)
     enable_language(OBJCXX)
@@ -465,9 +468,19 @@ endif()
 # Keisho — the executable
 # ---------------------------------------------------------------------------
 
-add_executable(keisho
-    main.cpp
-)
+if(SM2_PLATFORM_ANDROID)
+    # SDLActivity dlopen()s libmain.so and calls SDL_main (main.cpp includes
+    # SDL_main.h on Android, which renames main).
+    add_library(keisho SHARED
+        main.cpp
+    )
+    set_target_properties(keisho PROPERTIES OUTPUT_NAME "main")
+    target_link_libraries(keisho PRIVATE android log)
+else()
+    add_executable(keisho
+        main.cpp
+    )
+endif()
 
 # On macOS build a .app bundle so Finder and the Dock show the icon.
 if(SM2_PLATFORM_MACOS)
@@ -606,6 +619,8 @@ elseif(SM2_PLATFORM_WINDOWS)
     install(DIRECTORY "${CMAKE_SOURCE_DIR}/data/lang" DESTINATION "."
             FILES_MATCHING PATTERN "*.po" PATTERN "*.ttf" PATTERN "OFL.txt")
     install(FILES "${SM2_ICON_DIR}/keisho.ico" DESTINATION ".")
+elseif(SM2_PLATFORM_ANDROID)
+    # Packaged by the Gradle project in android/, not by cmake --install.
 else()
     install(TARGETS keisho RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
     install(FILES "${CMAKE_SOURCE_DIR}/data/games.xml"

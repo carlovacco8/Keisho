@@ -102,6 +102,10 @@ set_property(CACHE SM2_EVDEV PROPERTY STRINGS AUTO ON OFF)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(SM2_PLATFORM_LINUX TRUE)
+elseif(ANDROID)
+    # Android port: the emulator is built as libmain.so and started by an
+    # SDLActivity (see android/). Linux-only extras (evdev, fontconfig) stay off.
+    set(SM2_PLATFORM_ANDROID TRUE)
 elseif(APPLE)
     set(SM2_PLATFORM_MACOS TRUE)
 elseif(WIN32)

@@ -1,0 +1,71 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The native side (libmain.so = Keisho, libSDL3.so) is built by CMake with the
+// NDK before Gradle runs; see .github/workflows/android.yml. Gradle only
+// packages it, together with the SDL Java glue and the data files.
+
+android {
+    namespace = "io.github.carlovacco8.keisho"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "io.github.carlovacco8.keisho"
+        minSdk 26
+        targetSdk 34
+        versionCode (System.getenv("KEISHO_VERSION_CODE") ?: "1") as int
+        versionName "0.9.63-android"
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+    }
+
+    signingConfigs {
+        // A fixed, non-secret key so every build installs over the previous
+        // one. It only identifies this hobby build; it protects nothing.
+        keisho {
+            storeFile file('keisho-android.keystore')
+            storePassword 'keisho'
+            keyAlias 'keisho'
+            keyPassword 'keisho'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.keisho
+        }
+        debug {
+            signingConfig signingConfigs.keisho
+        }
+    }
+
+    sourceSets {
+        main {
+            // SDL's Java side, straight from the vendored submodule.
+            java.srcDirs += ['../../3rdparty/SDL/android-project/app/src/main/java']
+            // Prebuilt by the workflow into android/app/jniLibs/arm64-v8a/.
+            jniLibs.srcDirs = ['jniLibs']
+            // games.xml and lang/ are copied here by the workflow.
+            assets.srcDirs = ['assets']
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
+}
