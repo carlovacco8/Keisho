@@ -4,12 +4,14 @@
 // Keisho itself is the desktop program built as libmain.so; SDL's activity
 // runs its main(). This class prepares the ground and adds the Android parts:
 //   * games.xml, translations and keisho.ini in the app's files folder;
-//   * the game to run, from the launcher, ES-DE or a file manager;
-//   * on-screen touch controls on phones (TouchOverlay + a virtual pad);
+//   * the game to run, from ES-DE or a file manager; started from its icon
+//     it shows Keisho's own game list (as M2EA does: one native activity,
+//     the launcher drawn by the emulator itself);
+//   * on-screen touch controls on phones (TouchOverlay + a virtual pad),
+//     rebuilt for each game Keisho reports through onGameChanged();
+//   * the self-update check;
 //   * Android's folder chooser for Keisho's own "Browse..." buttons;
 //   * android.log, a life-cycle diagnostic log.
-// It runs in its own process (":game"), ended when the game closes, so every
-// game starts fresh while the launcher stays where it was.
 
 package io.github.carlovacco8.keisho;
 
@@ -63,7 +65,11 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
     private File mFilesDir;
     private String mRom;
     private TouchOverlay mOverlay;
+    static final String PREFS = "keisho";
     private int mTouchMode;   // 0 automatic, 1 always, 2 never
+    private boolean mTouchEnabled;
+    private GameDb mGameDb;
+    private String mCurrentSet = "";
     private boolean mPadAttached;
 
     @Override
@@ -76,6 +82,10 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
             requestStorageAccess();
         }
         setUpTouchControls();
+        KeishoApp.showLastCrash(this);
+        if (mRom == null) {
+            new Updater(this).checkAsync(false);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -102,23 +112,59 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
         if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)) {
             return;   // TVs: remote and pads only
         }
-        SharedPreferences prefs = getSharedPreferences(LauncherActivity.PREFS, Context.MODE_MULTI_PROCESS);
+        SharedPreferences prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         mTouchMode = prefs.getInt("touch_mode", 0);
         if (mTouchMode == 2 || mLayout == null) {
             return;
         }
-        GameDb.Game game = null;
-        if (mRom != null) {
-            String n = new File(mRom).getName();
-            int dot = n.lastIndexOf('.');
-            game = GameDb.load(this).get(dot > 0 ? n.substring(0, dot) : n);
-        }
-        mOverlay = new TouchOverlay(this, game, prefs.getInt("touch_size", 100) / 100f,
-                prefs.getInt("touch_alpha", 75));
-        mLayout.addView(mOverlay, new ViewGroup.LayoutParams(-1, -1));
+        mTouchEnabled = true;
         InputManager im = (InputManager) getSystemService(Context.INPUT_SERVICE);
         im.registerInputDeviceListener(this, mMain);
+    }
+
+    /**
+     * Called by Keisho (SDL thread) when a game starts or the game list comes
+     * back (""): the on-screen controls are rebuilt for that game, and taken
+     * away over the list, which is used by touching it directly.
+     */
+    public void onGameChanged(final String set) {
+        runOnUiThread(() -> applyGame(set == null ? "" : set));
+    }
+
+    private void applyGame(String set) {
+        if (!mTouchEnabled || set.equals(mCurrentSet) && (mOverlay != null || set.isEmpty())) {
+            mCurrentSet = set;
+            return;
+        }
+        mCurrentSet = set;
+        if (mOverlay != null) {
+            mOverlay.releaseAll();
+            mLayout.removeView(mOverlay);
+            mOverlay = null;
+        }
+        if (set.isEmpty()) {
+            detachPad();
+            return;
+        }
+        if (mGameDb == null) {
+            mGameDb = GameDb.load(this);
+        }
+        SharedPreferences prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        mOverlay = new TouchOverlay(this, mGameDb.get(set), prefs.getInt("touch_size", 100) / 100f,
+                prefs.getInt("touch_alpha", 75));
+        mLayout.addView(mOverlay, new ViewGroup.LayoutParams(-1, -1));
         updateTouchVisibility();
+    }
+
+    private void detachPad() {
+        if (mPadAttached) {
+            try {
+                nativeTouchDetach();
+            } catch (UnsatisfiedLinkError ignored) {
+                // Not loaded.
+            }
+            mPadAttached = false;
+        }
     }
 
     private static boolean hasRealController() {
@@ -146,20 +192,13 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
             attachPadWhenReady();
         } else {
             mOverlay.releaseAll();
-            if (mPadAttached) {
-                try {
-                    nativeTouchDetach();
-                } catch (UnsatisfiedLinkError ignored) {
-                    // Not loaded.
-                }
-                mPadAttached = false;
-            }
+            detachPad();
         }
     }
 
     /** Keisho opens SDL's gamepad support a moment after start; retry until then. */
     private void attachPadWhenReady() {
-        if (mPadAttached) {
+        if (mPadAttached || mOverlay == null) {
             return;
         }
         boolean ok;
@@ -275,7 +314,7 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
         }
         String path = "";
         if (resultCode == RESULT_OK && data != null && data.getData() != null) {
-            path = LauncherActivity.pathFromTreeUri(data.getData());
+            path = pathFromTreeUri(data.getData());
             if (path == null) {
                 Toast.makeText(this, "Cartella non supportata: scegline una nella memoria del dispositivo",
                         Toast.LENGTH_LONG).show();
@@ -284,6 +323,28 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
         }
         lifecycle("folder chosen: " + (path.isEmpty() ? "(none)" : path));
         nativeFolderPicked(path);
+    }
+
+    /** A folder chosen with Android's chooser, as a file path (internal storage or an SD card). */
+    static String pathFromTreeUri(Uri tree) {
+        try {
+            if (!"com.android.externalstorage.documents".equals(tree.getAuthority())) {
+                return null;
+            }
+            String id = DocumentsContract.getTreeDocumentId(tree);
+            int colon = id.indexOf(':');
+            if (colon < 0) {
+                return null;
+            }
+            String volume = id.substring(0, colon);
+            String rest = id.substring(colon + 1);
+            File base = "primary".equalsIgnoreCase(volume)
+                    ? Environment.getExternalStorageDirectory()
+                    : new File("/storage/" + volume);
+            return rest.isEmpty() ? base.getAbsolutePath() : new File(base, rest).getAbsolutePath();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static Uri documentUriForPath(String path) {
@@ -301,7 +362,7 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // This process only ever runs one game: end it with the game.
+        // Leaving Keisho ends the process, so the next start is a clean one.
         if (isFinishing()) {
             System.exit(0);
         }

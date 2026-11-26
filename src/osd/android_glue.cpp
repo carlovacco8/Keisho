@@ -173,6 +173,30 @@ std::string android_storage_root()
     return "/storage/emulated/0";
 }
 
+void android_game_changed(const std::string& set)
+{
+    auto* env      = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
+    auto  activity = static_cast<jobject>(SDL_GetAndroidActivity());
+    if (env == nullptr || activity == nullptr) {
+        return;
+    }
+    jclass    cls    = env->GetObjectClass(activity);
+    jmethodID method = cls != nullptr ? env->GetMethodID(cls, "onGameChanged", "(Ljava/lang/String;)V") : nullptr;
+    if (method != nullptr) {
+        jstring jset = env->NewStringUTF(set.c_str());
+        env->CallVoidMethod(activity, method, jset);
+        env->DeleteLocalRef(jset);
+    }
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+    }
+    if (cls != nullptr) {
+        env->DeleteLocalRef(cls);
+    }
+    env->DeleteLocalRef(activity);
+    logf("game: %s", set.empty() ? "(game list)" : set.c_str());
+}
+
 bool android_open_folder_picker(const std::string& initial)
 {
     {

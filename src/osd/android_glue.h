@@ -44,6 +44,10 @@ bool android_translate_event(SDL_Event* event);
 /// (some TV boxes), in which case the caller shows its built-in browser.
 [[nodiscard]] bool android_open_folder_picker(const std::string& initial);
 
+/// Tells the Java side which game is running ("" = the game list is up), so
+/// the on-screen controls match it and hide over the list. Call when it changes.
+void android_game_changed(const std::string& set);
+
 enum class AndroidPickResult { None, Picked, Cancelled, Unavailable };
 
 /// Polled each frame: the outcome of android_open_folder_picker(), once.

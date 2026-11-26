@@ -2281,6 +2281,18 @@ int main(int argc, char** argv)
                 SM2_WARN("auto-save (%s) to %s failed", why, path.c_str());
             }
         };
+        // A game launched from the list with an auto-save asks, paused,
+        // whether to resume it (M2EA-style). Drawn after the overlay.
+        bool        android_ask_resume = false;
+        std::string android_notified_game = "\x01";  ///< forces the first notice
+        const auto android_has_autosave = [&]() {
+            if (!loaded.has_value()) {
+                return false;
+            }
+            std::error_code ec;
+            return std::filesystem::is_regular_file(
+                hw::state_slot_path(options.config.states_dir, loaded->game.name, "auto"), ec);
+        };
 #endif
         bool settings_was_visible = gui.visible();  ///< Settings visibility, last frame.
         // What the game list is built from, as it was when the settings opened:
@@ -3157,6 +3169,15 @@ int main(int argc, char** argv)
                     g.timestamp = s.timestamp;
                     gui_slots.push_back(std::move(g));
                 }
+#if defined(__ANDROID__)
+                if (android_has_autosave()) {
+                    osd::Gui::StateSlot g;
+                    g.label    = "Auto (uscita)";
+                    g.slot     = "auto";
+                    g.occupied = true;
+                    gui_slots.insert(gui_slots.begin(), std::move(g));
+                }
+#endif
                 gui.set_state_slots(true, std::move(gui_slots));
             } else {
                 gui.set_state_slots(machine_any != nullptr, {});
@@ -3169,6 +3190,46 @@ int main(int argc, char** argv)
             const bool gui_active =
                 gui.draw(options.config, gpu_names, pacer.measured_hz(),
                         use_software_renderer ? "Software" : gpu_backend_name, &input);
+#if defined(__ANDROID__)
+            if (android_ask_resume && loaded.has_value() && !gui.visible()) {
+                const ImGuiViewport* vp = ImGui::GetMainViewport();
+                ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+                ImGui::SetNextWindowFocus();
+                ImGui::Begin("##resume", nullptr,
+                             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar
+                                 | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+                ImGui::TextUnformatted(loaded->game.title.c_str());
+                ImGui::Spacing();
+                ImGui::TextUnformatted("C'e' una partita lasciata a meta'.");
+                ImGui::Spacing();
+                const float w = ImGui::GetFontSize() * 9.0f;
+                const float h = ImGui::GetFontSize() * 2.6f;
+                int choice = 0;
+                if (ImGui::Button("Riprendi", ImVec2(w, h))) {
+                    choice = 1;
+                }
+                ImGui::SetItemDefaultFocus();
+                ImGui::SameLine();
+                if (ImGui::Button("Nuova partita", ImVec2(w, h))) {
+                    choice = 2;
+                }
+                ImGui::End();
+                if (choice != 0) {
+                    if (choice == 1) {
+                        state_action = StateAction{StateOp::Load, "auto"};
+                    }
+                    android_ask_resume = false;
+                    paused             = false;
+                }
+            }
+            {
+                const std::string running_set = loaded.has_value() ? loaded->game.name : std::string();
+                if (running_set != android_notified_game) {
+                    android_notified_game = running_set;
+                    osd::android_game_changed(running_set);
+                }
+            }
+#endif
             // An overlay Save/Load/Delete button is serviced like the hotkeys.
             if (std::optional<osd::Gui::StateRequest> req = gui.take_pending_state_request()) {
                 using A  = osd::Gui::StateRequest::Action;
@@ -3211,6 +3272,11 @@ int main(int argc, char** argv)
             // submitted: save NVRAM, wait for the GPU, drop the machine.
             if (return_to_picker_requested) {
                 return_to_picker_requested = false;
+#if defined(__ANDROID__)
+                android_autosave("back to list");
+                android_ask_resume = false;
+                paused             = false;
+#endif
                 async_soft.forget_machine();
                 if (machine_any != nullptr) {
                     machine_any->save_nvram();
@@ -3267,6 +3333,12 @@ int main(int argc, char** argv)
                 } else {
                     adopt_game(std::move(*chosen));
                     SM2_INFO("picker: launched '%s'", loaded->game.name.c_str());
+#if defined(__ANDROID__)
+                    if (android_has_autosave()) {
+                        android_ask_resume = true;
+                        paused             = true;
+                    }
+#endif
                 }
                 pacer.resync();
                 continue;
