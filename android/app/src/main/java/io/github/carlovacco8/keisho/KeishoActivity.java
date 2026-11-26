@@ -34,6 +34,8 @@ import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.InputDevice;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.ViewGroup;
 import android.widget.Toast;
 
@@ -73,6 +75,11 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
     private String mCurrentSet = "";
     private boolean mPadAttached;
     private boolean mMenuOpen;   // Keisho's settings are open: the controls step aside
+    // Physical pads reach the game through the same virtual pad as the touch
+    // controls (see dispatchKeyEvent): SDL does not take them itself.
+    private boolean mBridge;
+    private boolean mSelectHeld, mStartHeld;
+    private int mHatX, mHatY;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -84,6 +91,10 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
             requestStorageAccess();
         }
         setUpTouchControls();
+        if (hasRealController()) {
+            mBridge = true;
+            attachPadWhenReady();
+        }
         KeishoApp.showLastCrash(this);
         if (mRom == null) {
             new Updater(this).checkAsync(false);
@@ -180,6 +191,9 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
     }
 
     private void detachPad() {
+        if (mBridge && hasRealController()) {
+            return;  // a real pad plays through it
+        }
         if (mPadAttached) {
             try {
                 nativeTouchDetach();
@@ -229,7 +243,7 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
 
     /** Keisho opens SDL's gamepad support a moment after start; retry until then. */
     private void attachPadWhenReady() {
-        if (mPadAttached || mOverlay == null) {
+        if (mPadAttached || (mOverlay == null && !mBridge)) {
             return;
         }
         boolean ok;
@@ -247,7 +261,124 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
 
     @Override
     public void onInputDeviceAdded(int deviceId) {
+        if (isPad(InputDevice.getDevice(deviceId))) {
+            mBridge = true;
+            attachPadWhenReady();
+        }
         updateTouchVisibility();
+    }
+
+    // ------------------------------------------------------------------
+    // Physical pads (Bluetooth / USB), passed on through the virtual pad
+    // ------------------------------------------------------------------
+
+    private static boolean isPad(InputDevice d) {
+        if (d == null || d.isVirtual()) {
+            return false;
+        }
+        int s = d.getSources();
+        return (s & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+                || (s & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK;
+    }
+
+    /** Android key code -> SDL gamepad button, -1 for none; -2 / -3 for the L2 / R2 triggers. */
+    private static int padButton(int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_BUTTON_A:
+            case KeyEvent.KEYCODE_DPAD_CENTER: return TouchOverlay.BTN_A;
+            case KeyEvent.KEYCODE_BUTTON_B:    return TouchOverlay.BTN_B;
+            case KeyEvent.KEYCODE_BUTTON_X:    return TouchOverlay.BTN_X;
+            case KeyEvent.KEYCODE_BUTTON_Y:    return TouchOverlay.BTN_Y;
+            case KeyEvent.KEYCODE_BUTTON_SELECT:
+            case KeyEvent.KEYCODE_BACK:        return TouchOverlay.BTN_BACK;
+            case KeyEvent.KEYCODE_BUTTON_MODE: return 5;   // Guide
+            case KeyEvent.KEYCODE_BUTTON_START:
+            case KeyEvent.KEYCODE_MENU:        return TouchOverlay.BTN_START;
+            case KeyEvent.KEYCODE_BUTTON_THUMBL: return 7;
+            case KeyEvent.KEYCODE_BUTTON_THUMBR: return 8;
+            case KeyEvent.KEYCODE_BUTTON_L1:   return TouchOverlay.BTN_LB;
+            case KeyEvent.KEYCODE_BUTTON_R1:   return TouchOverlay.BTN_RB;
+            case KeyEvent.KEYCODE_DPAD_UP:     return 11;
+            case KeyEvent.KEYCODE_DPAD_DOWN:   return 12;
+            case KeyEvent.KEYCODE_DPAD_LEFT:   return 13;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:  return 14;
+            case KeyEvent.KEYCODE_BUTTON_L2:   return -2;
+            case KeyEvent.KEYCODE_BUTTON_R2:   return -3;
+            default:                           return -1;
+        }
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (isPad(event.getDevice())) {
+            int b = padButton(event.getKeyCode());
+            if (b != -1) {
+                int action = event.getAction();
+                if (action == KeyEvent.ACTION_MULTIPLE || event.getRepeatCount() > 0) {
+                    return true;
+                }
+                boolean down = action == KeyEvent.ACTION_DOWN;
+                mBridge = true;
+                attachPadWhenReady();
+                if (b == -2) {
+                    touchAxis(TouchOverlay.AXIS_LT, down ? 1f : 0f);
+                } else if (b == -3) {
+                    touchAxis(TouchOverlay.AXIS_RT, down ? 1f : 0f);
+                } else {
+                    touchButton(b, down);
+                }
+                // SELECT + START together: Keisho's settings (F10), the way
+                // back to the game list.
+                if (b == TouchOverlay.BTN_BACK) mSelectHeld = down;
+                if (b == TouchOverlay.BTN_START) mStartHeld = down;
+                if (down && mSelectHeld && mStartHeld) {
+                    SDLActivity.onNativeKeyDown(KeyEvent.KEYCODE_F10);
+                    SDLActivity.onNativeKeyUp(KeyEvent.KEYCODE_F10);
+                }
+                return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    private static float axis(MotionEvent e, int a) {
+        return e.getAxisValue(a);
+    }
+
+    private void hat(int now, int prev, int minus, int plus) {
+        if (now == prev) {
+            return;
+        }
+        if (prev < 0) touchButton(minus, false);
+        if (prev > 0) touchButton(plus, false);
+        if (now < 0) touchButton(minus, true);
+        if (now > 0) touchButton(plus, true);
+    }
+
+    @Override
+    public boolean dispatchGenericMotionEvent(MotionEvent e) {
+        if ((e.getSource() & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+                && e.getAction() == MotionEvent.ACTION_MOVE && isPad(e.getDevice())) {
+            mBridge = true;
+            attachPadWhenReady();
+            touchAxis(TouchOverlay.AXIS_LX, axis(e, MotionEvent.AXIS_X));
+            touchAxis(TouchOverlay.AXIS_LY, axis(e, MotionEvent.AXIS_Y));
+            touchAxis(2, axis(e, MotionEvent.AXIS_Z));
+            touchAxis(3, axis(e, MotionEvent.AXIS_RZ));
+            touchAxis(TouchOverlay.AXIS_LT,
+                    Math.max(axis(e, MotionEvent.AXIS_LTRIGGER), axis(e, MotionEvent.AXIS_BRAKE)));
+            touchAxis(TouchOverlay.AXIS_RT,
+                    Math.max(axis(e, MotionEvent.AXIS_RTRIGGER), axis(e, MotionEvent.AXIS_GAS)));
+            float hx = axis(e, MotionEvent.AXIS_HAT_X), hy = axis(e, MotionEvent.AXIS_HAT_Y);
+            int nx = hx < -0.5f ? -1 : hx > 0.5f ? 1 : 0;
+            int ny = hy < -0.5f ? -1 : hy > 0.5f ? 1 : 0;
+            hat(nx, mHatX, 13, 14);
+            hat(ny, mHatY, 11, 12);
+            mHatX = nx;
+            mHatY = ny;
+            return true;
+        }
+        return super.dispatchGenericMotionEvent(e);
     }
 
     @Override

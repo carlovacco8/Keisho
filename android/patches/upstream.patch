@@ -277,7 +277,7 @@ index 86a9858..3274dea 100644
      install(TARGETS keisho RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
      install(FILES "${CMAKE_SOURCE_DIR}/data/games.xml"
 diff --git a/src/main.cpp b/src/main.cpp
-index b4e37dc..4f2c7c4 100644
+index b4e37dc..7231f5e 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -61,6 +61,16 @@
@@ -508,7 +508,7 @@ index b4e37dc..4f2c7c4 100644
 +#if defined(__ANDROID__)
 +                        // Say on screen which pad was found: on a TV there is
 +                        // no other way to see whether it was taken.
-+                        if (event.type == SDL_EVENT_GAMEPAD_ADDED) {
++                        if (event.type == SDL_EVENT_GAMEPAD_ADDED && SDL_IsTV()) {
 +                            const char* pad_name = SDL_GetGamepadNameForID(event.gdevice.which);
 +                            gui.notify(std::string("Joypad: ") + (pad_name != nullptr ? pad_name : "?"));
 +                        }

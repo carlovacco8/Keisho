@@ -107,6 +107,11 @@ void android_prepare()
     // the pad was never opened: its buttons went nowhere and B became Back.
     // As keys they still move through the list (arrows, Enter, Back).
     SDL_SetHint(SDL_HINT_TV_REMOTE_AS_JOYSTICK, "0");
+    // Every real pad reaches the game through the app's own virtual pad
+    // (KeishoActivity passes on its buttons and sticks), which works on every
+    // device: SDL leaves the real ones alone, so none takes a player slot and
+    // stays silent (the Amazon Luna pad on a SHIELD did).
+    SDL_SetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT, "0x1209/0x7472");
     // Arcade monitors are landscape. Without this SDL lets a resizable window
     // follow the phone into portrait, overriding the manifest.
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
@@ -439,7 +444,9 @@ Java_io_github_carlovacco8_keisho_KeishoActivity_nativeTouchAttach(JNIEnv*, jcla
     desc.type     = SDL_JOYSTICK_TYPE_GAMEPAD;
     desc.naxes    = SDL_GAMEPAD_AXIS_COUNT;           // sticks + both triggers
     desc.nbuttons = SDL_GAMEPAD_BUTTON_DPAD_RIGHT + 1; // A..d-pad, in SDL order
-    desc.name     = "Keisho touch controls";
+    desc.name      = "TRI-ARCADE pad";
+    desc.vendor_id  = 0x1209;  // the one pad SDL is let see (see android_prepare)
+    desc.product_id = 0x7472;
     const SDL_JoystickID id = SDL_AttachVirtualJoystick(&desc);
     if (id == 0) {
         sm2::osd::logf("touch: could not attach the virtual pad: %s", SDL_GetError());
