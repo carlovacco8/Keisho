@@ -22,6 +22,10 @@
         tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Self-update: check the release, download and install the new APK. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
@@ -65,5 +69,9 @@
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".InstallResultReceiver"
+            android:exported="false" />
     </application>
 </manifest>

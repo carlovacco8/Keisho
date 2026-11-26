@@ -56,6 +56,7 @@ public class KeishoActivity extends SDLActivity {
         }
         super.onCreate(savedInstanceState);
         requestStorageAccess();
+        new Updater(this).checkAsync();
     }
 
     @Override

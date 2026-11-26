@@ -1,47 +1,117 @@
 name: Android
 
-# Builds the Android / Android TV APK (arm64-v8a): the native emulator with
-# the NDK and CMake (libmain.so + libSDL3.so), then the Gradle project in
-# android/ that packages it with SDL's Java glue. Each push to the android
-# branch replaces the "android-latest" pre-release, so there is always one
-# direct APK link to install.
+# Builds the Android / Android TV APK (arm64-v8a) from the LATEST upstream
+# Keisho (Keisho-Emu/Keisho, branch main) with this branch's Android port laid
+# over it (android/tools/prepare-upstream.sh).
+#
+# * A push to the android branch always builds.
+# * The scheduled watcher on main (upstream-watch.yml) dispatches this with
+#   only_if_changed=true: it builds only when upstream or this branch moved
+#   since the published build.
+#
+# Each build replaces the "android-latest" pre-release with the APK and a
+# version.json that the app reads at start-up to offer the update, including
+# the list of changes since the previous build.
 on:
   push:
     branches: [ android ]
   workflow_dispatch:
+    inputs:
+      only_if_changed:
+        description: 'Skip the build when nothing changed since the last release'
+        type: boolean
+        default: false
 
 concurrency:
-  group: android-${{ github.ref }}
-  cancel-in-progress: true
+  group: android-build
+  cancel-in-progress: false
 
 permissions:
   contents: write
+
+env:
+  UPSTREAM: https://github.com/Keisho-Emu/Keisho.git
+  RELEASE_BASE: https://github.com/${{ github.repository }}/releases/download/android-latest
 
 jobs:
   apk:
     name: APK (arm64-v8a)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the Android port
+        uses: actions/checkout@v4
         with:
-          submodules: recursive
+          path: port
+          fetch-depth: 0
+
+      - name: Check out upstream Keisho
+        run: |
+          git clone --filter=blob:none --branch main "$UPSTREAM" upstream
+          git -C upstream submodule update --init --recursive --depth 1
+
+      - name: Decide whether to build
+        id: decide
+        run: |
+          UP_SHA=$(git -C upstream rev-parse HEAD)
+          PORT_SHA=$(git -C port rev-parse HEAD)
+          echo "up_sha=$UP_SHA" >> "$GITHUB_OUTPUT"
+          echo "port_sha=$PORT_SHA" >> "$GITHUB_OUTPUT"
+          curl -fsSL "$RELEASE_BASE/version.json" -o prev.json || echo '{}' > prev.json
+          PREV_UP=$(python3 -c "import json;print(json.load(open('prev.json')).get('upstream_sha',''))")
+          PREV_PORT=$(python3 -c "import json;print(json.load(open('prev.json')).get('port_sha',''))")
+          echo "prev_up=$PREV_UP" >> "$GITHUB_OUTPUT"
+          echo "prev_port=$PREV_PORT" >> "$GITHUB_OUTPUT"
+          BUILD=true
+          if [ "${{ inputs.only_if_changed }}" = "true" ] \
+             && [ "$UP_SHA" = "$PREV_UP" ] && [ "$PORT_SHA" = "$PREV_PORT" ]; then
+            BUILD=false
+            echo "Nothing changed since the published build; skipping."
+          fi
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+
+      - name: Write the change list
+        if: steps.decide.outputs.build == 'true'
+        env:
+          PREV_UP: ${{ steps.decide.outputs.prev_up }}
+          PREV_PORT: ${{ steps.decide.outputs.prev_port }}
+        run: |
+          log_since() {  # <repo> <old sha> <limit>
+            if [ -n "$2" ] && git -C "$1" cat-file -e "$2^{commit}" 2>/dev/null; then
+              git -C "$1" log --no-merges --format='%s' "$2..HEAD" | head -n "$3"
+            else
+              git -C "$1" log --no-merges --format='%s' -n 10
+            fi
+          }
+          log_since upstream "$PREV_UP" 40 > upstream_changes.txt
+          log_since port "$PREV_PORT" 20 > port_changes.txt
+          echo "--- upstream"; cat upstream_changes.txt
+          echo "--- port"; cat port_changes.txt
+
+      - name: Lay the Android port over upstream
+        if: steps.decide.outputs.build == 'true'
+        run: port/android/tools/prepare-upstream.sh port upstream
 
       - name: Install build tools
+        if: steps.decide.outputs.build == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build glslc ccache
 
       - uses: actions/setup-java@v4
+        if: steps.decide.outputs.build == 'true'
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Cache ccache
+        if: steps.decide.outputs.build == 'true'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: android-arm64
 
       - name: Configure native build
+        if: steps.decide.outputs.build == 'true'
+        working-directory: upstream
         run: |
           NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
           echo "Using NDK: $NDK"
@@ -60,49 +130,100 @@ jobs:
             -DSM2_EVDEV=OFF
 
       - name: Build native libraries
+        if: steps.decide.outputs.build == 'true'
+        working-directory: upstream
         run: cmake --build build-android --target keisho -- -k 0
 
       - name: Stage libraries and data
+        if: steps.decide.outputs.build == 'true'
+        working-directory: upstream
         run: |
           mkdir -p android/app/jniLibs/arm64-v8a android/app/assets
           find build-android -name 'libmain.so' -exec cp {} android/app/jniLibs/arm64-v8a/ \;
           find build-android -name 'libSDL3.so' -exec cp {} android/app/jniLibs/arm64-v8a/ \;
+          test -f android/app/jniLibs/arm64-v8a/libmain.so
+          test -f android/app/jniLibs/arm64-v8a/libSDL3.so
           NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
           "$NDK"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-unneeded android/app/jniLibs/arm64-v8a/*.so
           ls -la android/app/jniLibs/arm64-v8a
-          test -f android/app/jniLibs/arm64-v8a/libmain.so
-          test -f android/app/jniLibs/arm64-v8a/libSDL3.so
           cp data/games.xml android/app/assets/
           cp -r data/lang android/app/assets/
 
       - uses: gradle/actions/setup-gradle@v4
+        if: steps.decide.outputs.build == 'true'
         with:
           gradle-version: '8.14.3'
           # The submodules carry their own sample wrappers; we use none of them.
           validate-wrappers: false
 
       - name: Build APK
+        if: steps.decide.outputs.build == 'true'
+        working-directory: upstream
         env:
           KEISHO_VERSION_CODE: ${{ github.run_number }}
         run: |
           gradle -p android assembleRelease --stacktrace
-          mkdir -p out
-          cp android/app/build/outputs/apk/release/app-release.apk out/Keisho-android-arm64.apk
-          ls -la out
+          mkdir -p ../out
+          cp android/app/build/outputs/apk/release/app-release.apk ../out/Keisho-android-arm64.apk
+          ls -la ../out
+
+      - name: Write version.json
+        if: steps.decide.outputs.build == 'true'
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          UP_SHA: ${{ steps.decide.outputs.up_sha }}
+          PORT_SHA: ${{ steps.decide.outputs.port_sha }}
+        run: |
+          python3 - <<'PY'
+          import datetime, json, os
+          def lines(path):
+              with open(path, encoding="utf-8") as f:
+                  return [l.strip() for l in f if l.strip()]
+          up, port = lines("upstream_changes.txt"), lines("port_changes.txt")
+          code = int(os.environ["VERSION_CODE"])
+          text = []
+          if up:
+              text.append("Emulatore (Keisho):")
+              text += ["• " + l for l in up]
+          if port:
+              if text:
+                  text.append("")
+              text.append("Versione Android:")
+              text += ["• " + l for l in port]
+          if not text:
+              text = ["Ricompilazione senza modifiche."]
+          data = {
+              "versionCode": code,
+              "versionName": f"build {code}",
+              "date": datetime.date.today().isoformat(),
+              "upstream_sha": os.environ["UP_SHA"],
+              "port_sha": os.environ["PORT_SHA"],
+              "apk": os.environ["RELEASE_BASE"] + "/Keisho-android-arm64.apk",
+              "changes": "\n".join(text),
+          }
+          with open("out/version.json", "w", encoding="utf-8") as f:
+              json.dump(data, f, ensure_ascii=False, indent=2)
+          with open("out/notes.md", "w", encoding="utf-8") as f:
+              f.write("APK per Android TV e cellulare (arm64).\n\n```\n" + data["changes"] + "\n```\n")
+          print(json.dumps(data, ensure_ascii=False, indent=2))
+          PY
 
       - uses: actions/upload-artifact@v4
+        if: steps.decide.outputs.build == 'true'
         with:
           name: Keisho-android-arm64
-          path: out/Keisho-android-arm64.apk
+          path: out/
 
       - name: Publish android-latest pre-release
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: steps.decide.outputs.build == 'true'
+        working-directory: port
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete android-latest --yes --cleanup-tag || true
-          gh release create android-latest out/Keisho-android-arm64.apk \
-            --target "${{ github.sha }}" \
+          gh release create android-latest \
+            ../out/Keisho-android-arm64.apk ../out/version.json \
+            --target "${{ steps.decide.outputs.port_sha }}" \
             --prerelease \
             --title "Keisho Android (build ${{ github.run_number }})" \
-            --notes "APK per Android TV e cellulare (arm64). Build automatica dal branch android, commit ${{ github.sha }}."
+            --notes-file ../out/notes.md

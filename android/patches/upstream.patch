@@ -1,0 +1,149 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 9ba4a69..ba3bdc8 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -102,6 +102,10 @@ set_property(CACHE SM2_EVDEV PROPERTY STRINGS AUTO ON OFF)
+ 
+ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+     set(SM2_PLATFORM_LINUX TRUE)
++elseif(ANDROID)
++    # Android port: the emulator is built as libmain.so and started by an
++    # SDLActivity (see android/). Linux-only extras (evdev, fontconfig) stay off.
++    set(SM2_PLATFORM_ANDROID TRUE)
+ elseif(APPLE)
+     set(SM2_PLATFORM_MACOS TRUE)
+ elseif(WIN32)
+diff --git a/cmake/Dependencies.cmake b/cmake/Dependencies.cmake
+index f8c172e..3ed079d 100644
+--- a/cmake/Dependencies.cmake
++++ b/cmake/Dependencies.cmake
+@@ -67,12 +67,19 @@ endif()
+ 
+ # glslc compiles GLSL to SPIR-V at build time. Prefer the one shipped beside
+ # the loader, then anything on PATH.
++# The Android NDK ships glslc under shader-tools/<host>/.
++set(SM2_NDK_GLSLC_HINTS)
++if(ANDROID AND DEFINED ANDROID_NDK)
++    file(GLOB SM2_NDK_GLSLC_HINTS "${ANDROID_NDK}/shader-tools/*")
++endif()
+ find_program(SM2_GLSLC
+     NAMES glslc
+     HINTS
+         "$ENV{VULKAN_SDK}/bin"
+         "${Vulkan_INCLUDE_DIR}/../bin"
++        ${SM2_NDK_GLSLC_HINTS}
+     DOC "glslc GLSL-to-SPIR-V compiler"
++    NO_CMAKE_FIND_ROOT_PATH
+ )
+ 
+ if(NOT SM2_GLSLC)
+@@ -105,8 +112,14 @@ else()
+ 
+     # Trim the build to what the emulator actually uses. SDL's own tests and
+     # the shared library are pure overhead here.
+-    set(SDL_SHARED        OFF CACHE BOOL "" FORCE)
+-    set(SDL_STATIC        ON  CACHE BOOL "" FORCE)
++    if(ANDROID)
++        # SDLActivity loads libSDL3.so and then libmain.so, so SDL is shared here.
++        set(SDL_SHARED    ON  CACHE BOOL "" FORCE)
++        set(SDL_STATIC    OFF CACHE BOOL "" FORCE)
++    else()
++        set(SDL_SHARED    OFF CACHE BOOL "" FORCE)
++        set(SDL_STATIC    ON  CACHE BOOL "" FORCE)
++    endif()
+     set(SDL_TEST_LIBRARY  OFF CACHE BOOL "" FORCE)
+     set(SDL_EXAMPLES      OFF CACHE BOOL "" FORCE)
+     set(SDL_INSTALL       OFF CACHE BOOL "" FORCE)
+@@ -505,7 +518,7 @@ endif()
+ # ImGui does not do. HarfBuzz is static on Windows and macOS so the packages
+ # carry no extra library; SheenBidi is rarely packaged, so always vendored.
+ 
+-if(WIN32 OR APPLE)
++if(WIN32 OR APPLE OR ANDROID)
+     set(harfbuzz_FOUND FALSE)
+ else()
+     find_package(PkgConfig QUIET)
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 86a9858..a374e2c 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -396,6 +396,9 @@ add_library(sm2_osd STATIC
+     osd/wheel_ffb.cpp
+     osd/window.cpp
+ )
++if(SM2_PLATFORM_ANDROID)
++    target_sources(sm2_osd PRIVATE osd/android_glue.cpp)
++endif()
+ # The host's application menu: a "Settings..." item on macOS, nothing elsewhere.
+ if(SM2_PLATFORM_MACOS)
+     enable_language(OBJCXX)
+@@ -465,9 +468,20 @@ endif()
+ # Keisho — the executable
+ # ---------------------------------------------------------------------------
+ 
+-add_executable(keisho
+-    main.cpp
+-)
++if(SM2_PLATFORM_ANDROID)
++    # SDLActivity dlopen()s libmain.so and calls SDL_main (main.cpp includes
++    # SDL_main.h on Android, which renames main).
++    add_library(keisho SHARED
++        main.cpp
++    )
++    set_target_properties(keisho PROPERTIES OUTPUT_NAME "main")
++    # ImGui's GLES3 backend calls GL directly on Android rather than loading it.
++    target_link_libraries(keisho PRIVATE android log GLESv3 EGL)
++else()
++    add_executable(keisho
++        main.cpp
++    )
++endif()
+ 
+ # On macOS build a .app bundle so Finder and the Dock show the icon.
+ if(SM2_PLATFORM_MACOS)
+@@ -606,6 +620,8 @@ elseif(SM2_PLATFORM_WINDOWS)
+     install(DIRECTORY "${CMAKE_SOURCE_DIR}/data/lang" DESTINATION "."
+             FILES_MATCHING PATTERN "*.po" PATTERN "*.ttf" PATTERN "OFL.txt")
+     install(FILES "${SM2_ICON_DIR}/keisho.ico" DESTINATION ".")
++elseif(SM2_PLATFORM_ANDROID)
++    # Packaged by the Gradle project in android/, not by cmake --install.
+ else()
+     install(TARGETS keisho RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+     install(FILES "${CMAKE_SOURCE_DIR}/data/games.xml"
+diff --git a/src/main.cpp b/src/main.cpp
+index b4e37dc..0067177 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -61,6 +61,11 @@
+ #include <memory>
+ 
+ #include <SDL3/SDL.h>
++#if defined(__ANDROID__)
++// Renames main() to SDL_main(), the entry point SDLActivity calls.
++#  include <SDL3/SDL_main.h>
++#  include "osd/android_glue.h"
++#endif
+ 
+ #include <imgui_impl_sdl3.h>
+ 
+@@ -926,6 +931,10 @@ int main(int argc, char** argv)
+ {
+     using namespace sm2;
+ 
++#if defined(__ANDROID__)
++    sm2::osd::android_prepare();
++#endif
++
+ #if defined(_WIN32)
+     attach_windows_console();
+ #endif
+@@ -2385,6 +2394,9 @@ int main(int argc, char** argv)
+ 
+             SDL_Event event;
+             while (SDL_PollEvent(&event)) {
++#if defined(__ANDROID__)
++                sm2::osd::android_translate_event(&event);
++#endif
+                 // Let ImGui see every event, bar a key the System tab is
+                 // binding, which its keyboard navigation would also press.
+                 if (event.type != SDL_EVENT_KEY_DOWN || !gui.visible() || !gui.capturing_key()) {
