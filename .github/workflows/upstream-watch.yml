@@ -1,0 +1,26 @@
+name: Upstream watch (Android)
+
+# Scheduled workflows only run from the default branch, so this small file
+# lives on main. Every few hours it asks the Android build on the android
+# branch to run; that build skips itself unless upstream Keisho (or the port)
+# changed since the published APK.
+on:
+  schedule:
+    - cron: '23 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Start the Android build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run android.yml \
+            --repo "${{ github.repository }}" \
+            --ref android \
+            -f only_if_changed=true
