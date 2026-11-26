@@ -8,7 +8,12 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_system.h>
 
+#include "core/cpu_topology.h"
+#include "core/log.h"
+
 #include <android/log.h>
+#include <dlfcn.h>
+#include <sys/resource.h>
 #include <jni.h>
 
 #include <cstdarg>
@@ -198,6 +203,65 @@ void android_game_changed(const std::string& set)
     }
     env->DeleteLocalRef(activity);
     logf("game: %s", set.empty() ? "(game list)" : set.c_str());
+}
+
+namespace {
+
+// APerformanceHint (Android 13+), looked up at run time so older Androids
+// still start.
+using HintGetManager    = void* (*)();
+using HintCreateSession = void* (*)(void*, const int32_t*, size_t, int64_t);
+using HintReport        = int (*)(void*, int64_t);
+
+HintReport g_hint_report  = nullptr;
+void*      g_hint_session = nullptr;
+
+}  // namespace
+
+void android_boost_emulation_thread()
+{
+    // The fast cores only (big and prime on a phone), where there are slow ones.
+    const sm2::core::CpuTopology topology = sm2::core::CpuTopology::detect();
+    if (!topology.slow.empty() && !topology.fast.empty()) {
+        sm2::core::pin_current_thread(topology.fast);
+        SM2_INFO("android: emulation on %zu fast core(s), first cpu%d", topology.fast.size(),
+                 topology.fast.front());
+    }
+    // A high priority: below the audio thread, above everything else of ours.
+    const pid_t tid = gettid();
+    if (setpriority(PRIO_PROCESS, static_cast<id_t>(tid), -10) == 0) {
+        SM2_INFO("android: emulation thread priority raised");
+    }
+    // A performance-hint session: tells Android how long a frame may take, so
+    // it raises the clocks before frames run late instead of after.
+    void* lib = dlopen("libandroid.so", RTLD_NOW);
+    if (lib == nullptr) {
+        return;
+    }
+    auto get_manager    = reinterpret_cast<HintGetManager>(dlsym(lib, "APerformanceHint_getManager"));
+    auto create_session = reinterpret_cast<HintCreateSession>(dlsym(lib, "APerformanceHint_createSession"));
+    auto report         = reinterpret_cast<HintReport>(dlsym(lib, "APerformanceHint_reportActualWorkDuration"));
+    if (get_manager == nullptr || create_session == nullptr || report == nullptr) {
+        return;  // before Android 13
+    }
+    void* manager = get_manager();
+    if (manager == nullptr) {
+        return;
+    }
+    const int32_t tids[] = {static_cast<int32_t>(tid)};
+    constexpr int64_t kFrameNs = 17'384'000;  // 57.52 Hz
+    g_hint_session = create_session(manager, tids, 1, kFrameNs);
+    if (g_hint_session != nullptr) {
+        g_hint_report = report;
+        SM2_INFO("android: performance hint session open");
+    }
+}
+
+void android_frame_work(u64 nanoseconds)
+{
+    if (g_hint_session != nullptr && nanoseconds > 0) {
+        g_hint_report(g_hint_session, static_cast<int64_t>(nanoseconds));
+    }
 }
 
 void android_menu_changed(bool open)

@@ -9,6 +9,8 @@
 
 #if defined(__ANDROID__)
 
+#include "core/types.h"
+
 #include <SDL3/SDL_events.h>
 
 #include <string>
@@ -47,6 +49,15 @@ bool android_translate_event(SDL_Event* event);
 /// Tells the Java side which game is running ("" = the game list is up), so
 /// the on-screen controls match it and hide over the list. Call when it changes.
 void android_game_changed(const std::string& set);
+
+/// Call once on the emulation thread: runs it on the fast cores at a high
+/// priority, and opens an Android performance-hint session for it (Android
+/// 13+) so the system raises the clocks when a frame runs late.
+void android_boost_emulation_thread();
+
+/// Each frame, the time the emulation thread worked on it (before pacing),
+/// for the performance-hint session.
+void android_frame_work(u64 nanoseconds);
 
 /// Tells the Java side whether Keisho's settings are open, so the on-screen
 /// controls step aside while they are. Call when it changes.
