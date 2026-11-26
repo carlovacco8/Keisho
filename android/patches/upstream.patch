@@ -681,7 +681,7 @@ index 720a708..490579f 100644
  
  }  // namespace sm2::osd
 diff --git a/src/osd/gui.cpp b/src/osd/gui.cpp
-index dd63b58..a2b0ee2 100644
+index dd63b58..98daea7 100644
 --- a/src/osd/gui.cpp
 +++ b/src/osd/gui.cpp
 @@ -21,6 +21,9 @@
@@ -831,7 +831,41 @@ index dd63b58..a2b0ee2 100644
      // A line under the tabs that fades at its ends.
      {
          const float y  = a.y + kit.px(10.0f) + kit.px(34.0f) + kit.px(4.0f);
-@@ -4201,6 +4279,90 @@ void Gui::draw_sinden_border(const Config& config)
+@@ -1509,7 +1587,11 @@ void Gui::page_about(ui::Kit& kit)
+         // The name, large, in the accent; the strap line under it.
+         const ImVec2 at   = ImGui::GetCursorScreenPos();
+         const float  big  = ImGui::GetFontSize() * 2.0f;
++#if defined(__ANDROID__)
++        list->AddText(ImGui::GetFont(), big, at, kit.palette().accent, "TRI-ARCADE");
++#else
+         list->AddText(ImGui::GetFont(), big, at, kit.palette().accent, "KEISHO");
++#endif
+         list->AddText(ImVec2(at.x + kit.px(2.0f), at.y + big + kit.px(4.0f)), kit.palette().muted,
+                       tr("A Sega Model 1, 2 & 3 arcade emulator"));
+         ImGui::Dummy(ImVec2(0.0f, big + ImGui::GetFontSize() + kit.px(8.0f)));
+@@ -1519,6 +1601,21 @@ void Gui::page_about(ui::Kit& kit)
+     kit.info(tr("Copyright"), nullptr, "2025+ Daniel Martin (dmanlfc)");
+     kit.info(tr("Licence"), nullptr, tr("GPL-3.0-or-later with additional terms; see LICENSE and NOTICE."));
+     kit.end_group();
++#if defined(__ANDROID__)
++    // Keisho's licence (NOTICE, section 7): a modified version says so on its
++    // About screen and links to Keisho. Plain strings: never renamed.
++    kit.begin_group("Based on Keisho");
++    kit.paragraph(nullptr,
++                  "TRI-ARCADE is a modified version of Keisho, the Sega Model 1, 2 & 3 arcade emulator "
++                  "by Daniel Martin (dmanlfc) and the Keisho contributors.");
++    {
++        const char* url = "https://github.com/Keisho-Emu/Keisho";
++        const ImVec2 at = kit.custom("Keisho", nullptr, ImGui::CalcTextSize(url).x, ImGui::GetFontSize());
++        ImGui::SetCursorScreenPos(at);
++        ImGui::TextLinkOpenURL(url, url);
++    }
++    kit.end_group();
++#endif
+ 
+     kit.begin_group(tr("Support development"));
+     {
+@@ -4201,6 +4298,90 @@ void Gui::draw_sinden_border(const Config& config)
      list->AddRectFilled(ImVec2(x1 - t, y0), ImVec2(x1, y1), colour);        // right
  }
  
@@ -922,7 +956,7 @@ index dd63b58..a2b0ee2 100644
  // ---------------------------------------------------------------------------
  // Directory picker (Paths tab "Browse..." buttons)
  // ---------------------------------------------------------------------------
-@@ -4211,12 +4373,17 @@ void Gui::open_dir_picker(DirPickerTarget target, const std::string& initial)
+@@ -4211,12 +4392,17 @@ void Gui::open_dir_picker(DirPickerTarget target, const std::string& initial)
  
      m_dir_picker_target = target;
  
@@ -940,7 +974,7 @@ index dd63b58..a2b0ee2 100644
  #else
          const char* home = std::getenv("HOME");
  #endif
-@@ -4274,11 +4441,37 @@ void Gui::draw_dir_picker_popup(Config& config)
+@@ -4274,11 +4460,37 @@ void Gui::draw_dir_picker_popup(Config& config)
          ImGui::OpenPopup(tr_id("Choose Directory"));
      }
  
@@ -980,7 +1014,7 @@ index dd63b58..a2b0ee2 100644
  
      char buf[1024];
      std::snprintf(buf, sizeof buf, "%s", m_dir_picker_path.c_str());
-@@ -4317,8 +4510,13 @@ void Gui::draw_dir_picker_popup(Config& config)
+@@ -4317,8 +4529,13 @@ void Gui::draw_dir_picker_popup(Config& config)
  
      if (ImGui::BeginChild("##dirlist",
                            ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 2), true)) {
@@ -995,7 +1029,7 @@ index dd63b58..a2b0ee2 100644
                  m_dir_picker_path = (current / name).string();
                  refresh_dir_picker_entries();
              }
-@@ -4490,6 +4688,11 @@ namespace {
+@@ -4490,6 +4707,11 @@ namespace {
  
  void Gui::draw_picker(Config& config)
  {
@@ -1007,7 +1041,7 @@ index dd63b58..a2b0ee2 100644
      poll_scraper_and_load_metadata();
  
      // Show the pointer in case a previous state (light-gun mode) hid it.
-@@ -4820,7 +5023,12 @@ void Gui::draw_picker(Config& config)
+@@ -4820,7 +5042,12 @@ void Gui::draw_picker(Config& config)
          }
          if (entry.art_state == PickerEntry::Art::Unknown && m_picker_backend != nullptr && m_picker_scraper != nullptr) {
              const Scraper::Metadata meta = m_picker_scraper->load_metadata(entry.name, entry.title);
@@ -1074,6 +1108,70 @@ index 36e43c7..6d64776 100644
      ui::NavState m_nav;                ///< where Up/Down focus is among the rows
      // Settings are saved a moment after they change (autosave()).
      std::optional<Config> m_saved_snapshot;
+diff --git a/src/osd/i18n.cpp b/src/osd/i18n.cpp
+index af257a3..8242ced 100644
+--- a/src/osd/i18n.cpp
++++ b/src/osd/i18n.cpp
+@@ -926,15 +926,35 @@ std::string shape(std::string_view text)
+     return out;
+ }
+ 
++#if defined(__ANDROID__)
++// The Android build is TRI-ARCADE: the name it shows wherever the text said
++// Keisho (the About page still credits Keisho, as its licence asks).
++static std::string rebrand(std::string text)
++{
++    static constexpr std::string_view kFrom = "Keisho";
++    static constexpr std::string_view kTo   = "TRI-ARCADE";
++    for (size_t at = text.find(kFrom); at != std::string::npos; at = text.find(kFrom, at + kTo.size())) {
++        text.replace(at, kFrom.size(), kTo);
++    }
++    return text;
++}
++#endif
++
+ const char* tr(const char* msgid)
+ {
+     State& s = state();
++#if !defined(__ANDROID__)
+     if (s.catalog.empty()) {
+         return msgid;
+     }
++#endif
+     auto it = s.display.find(std::string_view(msgid));
+     if (it == s.display.end()) {
++#if defined(__ANDROID__)
++        it = s.display.emplace(msgid, rebrand(shape(translate(msgid)))).first;
++#else
+         it = s.display.emplace(msgid, shape(translate(msgid))).first;
++#endif
+     }
+     return it->second.c_str();
+ }
+@@ -959,7 +979,11 @@ std::string trf(const char* fmt, ...)
+     va_start(args, fmt);
+     std::string text = vformat(translated, args);
+     va_end(args);
++#if defined(__ANDROID__)
++    return rebrand(state().catalog.empty() ? text : shape(text));
++#else
+     return state().catalog.empty() ? text : shape(text);
++#endif
+ }
+ 
+ std::string trnf(const char* singular, const char* plural, unsigned long n, ...)
+@@ -979,7 +1003,11 @@ std::string trnf(const char* singular, const char* plural, unsigned long n, ...)
+     va_start(args, n);
+     std::string text = vformat(fmt, args);
+     va_end(args);
++#if defined(__ANDROID__)
++    return rebrand(s.catalog.empty() ? text : shape(text));
++#else
+     return s.catalog.empty() ? text : shape(text);
++#endif
+ }
+ 
+ }  // namespace sm2::i18n
 diff --git a/src/rom/rom_loader.cpp b/src/rom/rom_loader.cpp
 index 0b791ce..89e6232 100644
 --- a/src/rom/rom_loader.cpp

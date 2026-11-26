@@ -93,7 +93,7 @@ final class Updater {
         String name = info.optString("versionName", "");
         String date = info.optString("date", "");
         String changes = info.optString("changes", "");
-        String message = "È disponibile una nuova versione di Keisho"
+        String message = "È disponibile una nuova versione di TRI-ARCADE"
                 + (name.isEmpty() ? "" : " (" + name + (date.isEmpty() ? "" : ", " + date) + ")")
                 + ".\n\nCosa cambia:\n" + changes;
         new AlertDialog.Builder(mActivity)
@@ -114,7 +114,7 @@ final class Updater {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 && !mActivity.getPackageManager().canRequestPackageInstalls()) {
             Toast.makeText(mActivity,
-                    "Consenti a Keisho di installare app, poi scegli di nuovo Aggiorna",
+                    "Consenti a TRI-ARCADE di installare app, poi scegli di nuovo Aggiorna",
                     Toast.LENGTH_LONG).show();
             try {
                 mActivity.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
@@ -191,7 +191,7 @@ final class Updater {
             mActivity.startActivity(view);
         } catch (RuntimeException e) {
             Log.e(TAG, "no installer for the update", e);
-            Toast.makeText(mActivity, "Apri Download/Keisho-android-arm64.apk per installare l'aggiornamento",
+            Toast.makeText(mActivity, "Apri Download/TRI-ARCADE.apk per installare l'aggiornamento",
                     Toast.LENGTH_LONG).show();
         }
     }
@@ -200,7 +200,7 @@ final class Updater {
         try {
             File dir = android.os.Environment.getExternalStoragePublicDirectory(
                     android.os.Environment.DIRECTORY_DOWNLOADS);
-            java.nio.file.Files.copy(apk.toPath(), new File(dir, "Keisho-android-arm64.apk").toPath(),
+            java.nio.file.Files.copy(apk.toPath(), new File(dir, "TRI-ARCADE.apk").toPath(),
                     java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         } catch (Throwable e) {
             Log.w(TAG, "could not copy the update to Download: " + e);
@@ -214,7 +214,7 @@ final class Updater {
         c.setConnectTimeout(8000);
         c.setReadTimeout(20000);
         c.setInstanceFollowRedirects(true);
-        c.setRequestProperty("User-Agent", "Keisho-Android");
+        c.setRequestProperty("User-Agent", "TRI-ARCADE");
         int code = c.getResponseCode();
         if (code != HttpURLConnection.HTTP_OK) {
             c.disconnect();

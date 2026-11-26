@@ -4,7 +4,7 @@
 // On Android the game list replaces Keisho's desktop grid with a carousel of
 // covers in M2EA's manner:
 //
-//   * a bar at the top: KEISHO and the version, the number of games, and the
+//   * a bar at the top: TRI-ARCADE and the version, the number of games, and the
 //     tabs Games / Video / Input / Audio / System (the last four open
 //     Keisho's own settings at that page);
 //   * the covers in the middle, the chosen one large with an orange frame,
@@ -248,8 +248,8 @@ void Gui::draw_picker_android(Config& config)
         const float  big   = std::round(25.0f * u);
         const float  small = std::round(12.0f * u);
         const ImVec2 at(top_a.x + std::round(22.0f * u), top_a.y + std::round(8.0f * u));
-        list->AddText(ImGui::GetFont(), big, at, kOrange, "KEISHO");
-        const float kw = ImGui::GetFont()->CalcTextSizeA(big, FLT_MAX, 0.0f, "KEISHO").x;
+        list->AddText(ImGui::GetFont(), big, at, kOrange, "TRI-ARCADE");
+        const float kw = ImGui::GetFont()->CalcTextSizeA(big, FLT_MAX, 0.0f, "TRI-ARCADE").x;
         const std::string ver = std::string("v") + SM2_VERSION;
         list->AddText(ImGui::GetFont(), small, ImVec2(at.x + kw + std::round(10.0f * u), at.y + big - small - 2.0f * u),
                       kDim, ver.c_str());

@@ -290,14 +290,15 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
         final File from = Setup.filesDir(this);
         new Thread(() -> {
             try {
-                File to = new File(Environment.getExternalStorageDirectory(), "Keisho/log");
+                File to = new File(Environment.getExternalStorageDirectory(), "TRI-ARCADE/log");
                 if (!to.isDirectory() && !to.mkdirs()) {
                     return;
                 }
-                for (String name : new String[] { "keisho.log", "android.log" }) {
-                    File src = new File(from, name);
+                String[][] names = { { "keisho.log", "tri-arcade.log" }, { "android.log", "android.log" } };
+                for (String[] name : names) {
+                    File src = new File(from, name[0]);
                     if (src.isFile()) {
-                        java.nio.file.Files.copy(src.toPath(), new File(to, name).toPath(),
+                        java.nio.file.Files.copy(src.toPath(), new File(to, name[1]).toPath(),
                                 java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                     }
                 }
@@ -464,7 +465,7 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
 
     private void requestStorageAccess() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Toast.makeText(this, "Keisho: consenti l'accesso a tutti i file, poi riapri il gioco",
+            Toast.makeText(this, "TRI-ARCADE: consenti l'accesso a tutti i file, poi riapri il gioco",
                     Toast.LENGTH_LONG).show();
             try {
                 startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,

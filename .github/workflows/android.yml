@@ -1,13 +1,11 @@
 name: Android
 
-# Builds the Android / Android TV APK (arm64-v8a) from the LATEST upstream
-# Keisho (Keisho-Emu/Keisho, branch main) with this branch's Android port laid
-# over it (android/scripts/prepare-upstream.sh).
+# Builds TRI-ARCADE, the Android / Android TV APK (arm64-v8a), from upstream
+# Keisho (Keisho-Emu/Keisho) frozen at UPSTREAM_REF, with this branch's Android
+# port laid over it (android/scripts/prepare-upstream.sh).
 #
-# * A push to the android branch always builds.
-# * The scheduled watcher on main (upstream-watch.yml) dispatches this with
-#   only_if_changed=true: it builds only when upstream or this branch moved
-#   since the published build.
+# * Only a push to the android branch (or a manual run) builds: upstream
+#   changes never reach the app on their own.
 #
 # Each build replaces the "android-latest" pre-release with the APK and a
 # version.json that the app reads at start-up to offer the update, including
@@ -31,6 +29,9 @@ permissions:
 
 env:
   UPSTREAM: https://github.com/Keisho-Emu/Keisho.git
+  # The emulator is frozen at this upstream commit: builds change only when
+  # this branch does. Move it by hand to take newer upstream work.
+  UPSTREAM_REF: e7414144247a8652ace002524237b75cb390abfb
   RELEASE_BASE: https://github.com/${{ github.repository }}/releases/download/android-latest
 
 jobs:
@@ -47,6 +48,7 @@ jobs:
       - name: Check out upstream Keisho
         run: |
           git clone --filter=blob:none --branch main "$UPSTREAM" upstream
+          git -C upstream checkout --quiet "$UPSTREAM_REF"
           git -C upstream submodule update --init --recursive --depth 1
 
       - name: Decide whether to build
@@ -168,7 +170,7 @@ jobs:
         run: |
           gradle -p android assembleRelease --stacktrace
           mkdir -p ../out
-          cp android/app/build/outputs/apk/release/app-release.apk ../out/Keisho-android-arm64.apk
+          cp android/app/build/outputs/apk/release/app-release.apk ../out/TRI-ARCADE.apk
           ls -la ../out
 
       - name: Write version.json
@@ -186,14 +188,8 @@ jobs:
           up, port = lines("upstream_changes.txt"), lines("port_changes.txt")
           code = int(os.environ["VERSION_CODE"])
           text = []
-          if up:
-              text.append("Emulatore (Keisho):")
-              text += ["• " + l for l in up]
-          if port:
-              if text:
-                  text.append("")
-              text.append("Versione Android:")
-              text += ["• " + l for l in port]
+          # Only this app's own changes are listed.
+          text = ["• " + l for l in port]
           if not text:
               text = ["Ricompilazione senza modifiche."]
           data = {
@@ -202,20 +198,20 @@ jobs:
               "date": datetime.date.today().isoformat(),
               "upstream_sha": os.environ["UP_SHA"],
               "port_sha": os.environ["PORT_SHA"],
-              "apk": os.environ["RELEASE_BASE"] + "/Keisho-android-arm64.apk",
+              "apk": os.environ["RELEASE_BASE"] + "/TRI-ARCADE.apk",
               "changes": "\n".join(text),
           }
           with open("out/version.json", "w", encoding="utf-8") as f:
               json.dump(data, f, ensure_ascii=False, indent=2)
           with open("out/notes.md", "w", encoding="utf-8") as f:
-              f.write("APK per Android TV e cellulare (arm64).\n\n```\n" + data["changes"] + "\n```\n")
+              f.write("TRI-ARCADE per Android TV e cellulare (arm64).\n\n```\n" + data["changes"] + "\n```\n")
           print(json.dumps(data, ensure_ascii=False, indent=2))
           PY
 
       - uses: actions/upload-artifact@v4
         if: steps.decide.outputs.build == 'true'
         with:
-          name: Keisho-android-arm64
+          name: TRI-ARCADE
           path: out/
 
       - name: Publish android-latest pre-release
@@ -226,8 +222,8 @@ jobs:
         run: |
           gh release delete android-latest --yes --cleanup-tag || true
           gh release create android-latest \
-            ../out/Keisho-android-arm64.apk ../out/version.json \
+            ../out/TRI-ARCADE.apk ../out/version.json \
             --target "${{ steps.decide.outputs.port_sha }}" \
             --prerelease \
-            --title "Keisho Android (build ${{ github.run_number }})" \
+            --title "TRI-ARCADE (build ${{ github.run_number }})" \
             --notes-file ../out/notes.md
