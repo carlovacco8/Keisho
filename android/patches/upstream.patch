@@ -63,6 +63,127 @@ index f8c172e..3ed079d 100644
      set(harfbuzz_FOUND FALSE)
  else()
      find_package(PkgConfig QUIET)
+diff --git a/data/games.xml b/data/games.xml
+index 9870317..7c12cce 100644
+--- a/data/games.xml
++++ b/data/games.xml
+@@ -1112,7 +1112,7 @@
+         <file name="mpr-16770.27" offset="0x800000" crc="0xf9fa7bfb"/>
+         <file name="mpr-16769.26" offset="0x800002" crc="0xe57429e9"/>
+       </region>
+-      <region name="cpu3" size="0x20000">
++      <region name="cpu3" size="0x20000" required="false">
+         <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
+       </region>
+       <!-- Model 1 sound board (68000 + YM3438 + 2x MultiPCM), named as MAME
+@@ -1200,7 +1200,7 @@
+         <file name="epr-16646.ic19" offset="0xc00000" crc="0x7ba9fd6b"/>
+         <file name="epr-16645.ic23" offset="0xc00002" crc="0x78fe0b8a"/>
+       </region>
+-      <region name="cpu3" size="0x20000" stride="2" chunk="2" byte_swap="true">
++      <region name="cpu3" size="0x20000" stride="2" chunk="2" byte_swap="true" required="false">
+         <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
+       </region>
+       <region name="copro_tgp_tables" size="0x40000" stride="4" chunk="2">
+@@ -1287,7 +1287,7 @@
+         <file name="mpr-16770.27" offset="0x800000" crc="0xf9fa7bfb"/>
+         <file name="mpr-16769.26" offset="0x800002" crc="0xe57429e9"/>
+       </region>
+-      <region name="cpu3" size="0x20000" stride="2" chunk="2" byte_swap="true">
++      <region name="cpu3" size="0x20000" stride="2" chunk="2" byte_swap="true" required="false">
+         <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
+       </region>
+       <region name="copro_tgp_tables" size="0x40000" stride="4" chunk="2">
+@@ -1356,7 +1356,7 @@
+         <file name="mpr-16772.ic19" offset="0xc00000" crc="0x770ed912"/>
+         <file name="mpr-16771.ic23" offset="0xc00002" crc="0xa2205124"/>
+       </region>
+-      <region name="cpu3" size="0x20000" stride="2" chunk="2" byte_swap="true">
++      <region name="cpu3" size="0x20000" stride="2" chunk="2" byte_swap="true" required="false">
+         <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
+       </region>
+       <region name="copro_tgp_tables" size="0x40000" stride="4" chunk="2">
+@@ -1434,7 +1434,7 @@
+         <file name="mpr-16770.27" offset="0x800000" crc="0xf9fa7bfb"/>
+         <file name="mpr-16769.26" offset="0x800002" crc="0xe57429e9"/>
+       </region>
+-      <region name="cpu3" size="0x20000">
++      <region name="cpu3" size="0x20000" required="false">
+         <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
+       </region>
+       <region name="m1audio:sndcpu" size="0xc0000" stride="2" chunk="2" byte_swap="true">
+@@ -1527,7 +1527,7 @@
+         <file name="mpr-16770.27" offset="0x800000" crc="0xf9fa7bfb"/>
+         <file name="mpr-16769.26" offset="0x800002" crc="0xe57429e9"/>
+       </region>
+-      <region name="cpu3" size="0x20000">
++      <region name="cpu3" size="0x20000" required="false">
+         <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
+       </region>
+       <region name="m1audio:sndcpu" size="0xc0000" stride="2" chunk="2" byte_swap="true">
+@@ -1620,7 +1620,7 @@
+         <file name="mpr-16770.27" offset="0x800000" crc="0xf9fa7bfb"/>
+         <file name="mpr-16769.26" offset="0x800002" crc="0xe57429e9"/>
+       </region>
+-      <region name="cpu3" size="0x20000">
++      <region name="cpu3" size="0x20000" required="false">
+         <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
+       </region>
+       <region name="m1audio:sndcpu" size="0xc0000" stride="2" chunk="2" byte_swap="true">
+@@ -1718,7 +1718,7 @@
+         <file name="mpr-16770.27" offset="0x800000" crc="0xf9fa7bfb"/>
+         <file name="mpr-16769.26" offset="0x800002" crc="0xe57429e9"/>
+       </region>
+-      <region name="cpu3" size="0x20000">
++      <region name="cpu3" size="0x20000" required="false">
+         <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
+       </region>
+       <region name="m1audio:sndcpu" size="0xc0000" stride="2" chunk="2" byte_swap="true">
+@@ -4936,7 +4936,7 @@
+         <file name="mpr-17753.25" offset="0x000000" crc="0x6db0eb36"/>
+         <file name="mpr-17752.24" offset="0x000002" crc="0xd6aa86ce"/>
+       </region>
+-      <region name="cpu4" size="0x20000">
++      <region name="cpu4" size="0x20000" required="false">
+         <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
+       </region>
+       <region name="audiocpu" size="0x80000" stride="2" chunk="2" byte_swap="true">
+@@ -5014,7 +5014,7 @@
+         <file name="mpr-17753.25" offset="0x000000" crc="0x6db0eb36"/>
+         <file name="mpr-17752.24" offset="0x000002" crc="0xd6aa86ce"/>
+       </region>
+-      <region name="cpu4" size="0x20000">
++      <region name="cpu4" size="0x20000" required="false">
+         <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
+       </region>
+       <region name="audiocpu" size="0x80000" stride="2" chunk="2" byte_swap="true">
+@@ -5087,7 +5087,7 @@
+         <file name="mpr-17753.25" offset="0x000000" crc="0x6db0eb36"/>
+         <file name="mpr-17752.24" offset="0x000002" crc="0xd6aa86ce"/>
+       </region>
+-      <region name="cpu4" size="0x20000">
++      <region name="cpu4" size="0x20000" required="false">
+         <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
+       </region>
+       <region name="audiocpu" size="0x80000" stride="2" chunk="2" byte_swap="true">
+@@ -5160,7 +5160,7 @@
+         <file name="mpr-17753.25" offset="0x000000" crc="0x6db0eb36"/>
+         <file name="mpr-17752.24" offset="0x000002" crc="0xd6aa86ce"/>
+       </region>
+-      <region name="cpu4" size="0x20000">
++      <region name="cpu4" size="0x20000" required="false">
+         <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
+       </region>
+       <region name="audiocpu" size="0x80000" stride="2" chunk="2" byte_swap="true">
+@@ -5231,7 +5231,7 @@
+         <file name="mpr-17753.25" offset="0x000000" crc="0x6db0eb36"/>
+         <file name="mpr-17752.24" offset="0x000002" crc="0xd6aa86ce"/>
+       </region>
+-      <region name="cpu4" size="0x20000">
++      <region name="cpu4" size="0x20000" required="false">
+         <file name="epr-16726.bin" offset="0x000000" crc="0xc179b8c7"/>
+       </region>
+       <region name="audiocpu" size="0x80000" stride="2" chunk="2" byte_swap="true">
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
 index 86a9858..a374e2c 100644
 --- a/src/CMakeLists.txt
