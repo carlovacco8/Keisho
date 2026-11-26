@@ -59,6 +59,12 @@ void android_boost_emulation_thread();
 /// for the performance-hint session.
 void android_frame_work(u64 nanoseconds);
 
+/// Model 3 frame skip: called after a frame is emulated, before it is drawn,
+/// with the time spent on it so far. True to skip drawing it: when frames
+/// have been taking longer than the machine's 17.4 ms, every other frame is
+/// emulated but not drawn, so the game and its sound keep full speed.
+[[nodiscard]] bool android_skip_frame(u64 elapsed_ns);
+
 /// Each frame, the time the machine's run_frame() took (the emulation alone).
 void android_emulation_time(u64 nanoseconds);
 

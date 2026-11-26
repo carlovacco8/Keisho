@@ -19,6 +19,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <algorithm>
 #include <atomic>
 #include <ctime>
 #include <mutex>
@@ -219,6 +220,17 @@ void*      g_hint_session = nullptr;
 float g_emulation_ms = 0.0f;  // smoothed, emulation thread only
 float g_frame_ms     = 0.0f;
 
+// Frame skip: time owed against the machine's frame period, in ns.
+constexpr s64 kFramePeriodNs = 17'384'000;  // 57.52 Hz
+s64  g_debt_ns     = 0;
+bool g_last_skipped = false;
+
+void add_debt(u64 frame_ns)
+{
+    g_debt_ns += static_cast<s64>(frame_ns) - kFramePeriodNs;
+    g_debt_ns = std::clamp<s64>(g_debt_ns, -kFramePeriodNs, kFramePeriodNs * 4);
+}
+
 void smooth(float& average, u64 nanoseconds)
 {
     const float ms = static_cast<float>(nanoseconds) / 1.0e6f;
@@ -274,9 +286,22 @@ void android_emulation_time(u64 nanoseconds)
     smooth(g_emulation_ms, nanoseconds);
 }
 
+bool android_skip_frame(u64 elapsed_ns)
+{
+    // Never two in a row: at least every other frame is shown.
+    if (g_last_skipped || g_debt_ns <= 0) {
+        g_last_skipped = false;
+        return false;
+    }
+    g_last_skipped = true;
+    add_debt(elapsed_ns);
+    return true;
+}
+
 void android_frame_work(u64 nanoseconds)
 {
     smooth(g_frame_ms, nanoseconds);
+    add_debt(nanoseconds);
     if (g_hint_session != nullptr && nanoseconds > 0) {
         g_hint_report(g_hint_session, static_cast<int64_t>(nanoseconds));
     }
