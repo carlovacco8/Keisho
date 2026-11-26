@@ -277,7 +277,7 @@ index 86a9858..3274dea 100644
      install(TARGETS keisho RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
      install(FILES "${CMAKE_SOURCE_DIR}/data/games.xml"
 diff --git a/src/main.cpp b/src/main.cpp
-index b4e37dc..f905c20 100644
+index b4e37dc..98d55a8 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -61,6 +61,16 @@
@@ -590,16 +590,19 @@ index b4e37dc..f905c20 100644
                  }
                  if (!rewinding) {
                      rewind.capture(*machine_any);
-@@ -2802,6 +2957,18 @@ int main(int argc, char** argv)
+@@ -2802,6 +2957,21 @@ int main(int argc, char** argv)
                  }
              }
  
 +#if defined(__ANDROID__)
-+            // Model 3 frame skip: when the phone cannot draw every frame in
-+            // time, every other one is emulated (game and sound at full speed)
-+            // but not drawn. The async build of the last drawn frame waits,
-+            // intact, for the next one.
-+            if (machine_m3 != nullptr && m3_async && !gui.visible() && !paused && !gui.android_paused()
++            // Frame skip: when the device cannot draw every frame in time,
++            // every other one is emulated (game and sound at full speed) but
++            // not drawn. Model 3: the async build of the last drawn frame
++            // waits, intact, for the next one. Model 2 on the GPU: the machine
++            // builds a fresh polygon list each frame, so one can go undrawn.
++            const bool android_can_skip = (machine_m3 != nullptr && m3_async)
++                                       || (machine_iface != nullptr && !use_software_renderer);
++            if (android_can_skip && !gui.visible() && !paused && !gui.android_paused()
 +                && !state_action.has_value() && !return_to_picker_requested
 +                && osd::android_skip_frame(SDL_GetTicksNS() - frame_start_ns)) {
 +                frames_written_off += pacer.wait();
@@ -609,7 +612,7 @@ index b4e37dc..f905c20 100644
              // The scope closes before the continue below so a skipped frame's
              // SDL_Delay is not folded into present_wait.
              bool begin_ok;
-@@ -3110,6 +3277,15 @@ int main(int argc, char** argv)
+@@ -3110,6 +3280,15 @@ int main(int argc, char** argv)
                      g.timestamp = s.timestamp;
                      gui_slots.push_back(std::move(g));
                  }
@@ -625,7 +628,7 @@ index b4e37dc..f905c20 100644
                  gui.set_state_slots(true, std::move(gui_slots));
              } else {
                  gui.set_state_slots(machine_any != nullptr, {});
-@@ -3122,6 +3298,20 @@ int main(int argc, char** argv)
+@@ -3122,6 +3301,20 @@ int main(int argc, char** argv)
              const bool gui_active =
                  gui.draw(options.config, gpu_names, pacer.measured_hz(),
                          use_software_renderer ? "Software" : gpu_backend_name, &input);
@@ -646,7 +649,7 @@ index b4e37dc..f905c20 100644
              // An overlay Save/Load/Delete button is serviced like the hotkeys.
              if (std::optional<osd::Gui::StateRequest> req = gui.take_pending_state_request()) {
                  using A  = osd::Gui::StateRequest::Action;
-@@ -3139,8 +3329,13 @@ int main(int argc, char** argv)
+@@ -3139,8 +3332,13 @@ int main(int argc, char** argv)
              if (!settings_was_visible && gui.visible()) {
                  list_inputs_at_open = list_inputs();
              }
@@ -661,7 +664,7 @@ index b4e37dc..f905c20 100644
                  show_picker();
              }
              settings_was_visible = gui.visible();
-@@ -3164,6 +3359,9 @@ int main(int argc, char** argv)
+@@ -3164,6 +3362,9 @@ int main(int argc, char** argv)
              // submitted: save NVRAM, wait for the GPU, drop the machine.
              if (return_to_picker_requested) {
                  return_to_picker_requested = false;
@@ -671,7 +674,7 @@ index b4e37dc..f905c20 100644
                  async_soft.forget_machine();
                  if (machine_any != nullptr) {
                      machine_any->save_nvram();
-@@ -3349,6 +3547,9 @@ int main(int argc, char** argv)
+@@ -3349,6 +3550,9 @@ int main(int argc, char** argv)
                  }
              }
  
@@ -681,7 +684,7 @@ index b4e37dc..f905c20 100644
              // Last thing in the loop, so the wait absorbs the whole frame's cost.
              frames_written_off += pacer.wait();
  
-@@ -3368,6 +3569,10 @@ int main(int argc, char** argv)
+@@ -3368,6 +3572,10 @@ int main(int argc, char** argv)
              }
          }
  
