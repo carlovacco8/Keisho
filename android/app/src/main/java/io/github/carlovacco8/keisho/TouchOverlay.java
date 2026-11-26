@@ -8,8 +8,10 @@
 // Drives the virtual SDL gamepad created in android_glue.cpp, so the game
 // sees an ordinary pad: left stick = stick / steering, RT = gas, LT = brake,
 // LB / RB = gear down / up, A B X Y = buttons 1-4 (VR view buttons on racers),
-// Start = start, Back = coin. SAVE / LOAD / SETTINGS / STATS / EXIT are
-// Keisho's keyboard shortcuts (F6 F7 F10 F8 F9); SLOT picks the slot SAVE and
+// Start = start, Back = coin. SAVE / LOAD / SETTINGS / STATS are Keisho's
+// keyboard shortcuts (F6 F7 F10 F8); EXIT is Esc, which goes back to the game
+// list (or closes Keisho when it was started on a game by ES-DE, as there is
+// no list to go back to); SLOT picks the slot SAVE and
 // LOAD use. Touches that miss every control pass through to the game, which
 // takes them as the mouse (aim and fire on gun games).
 //
@@ -226,7 +228,7 @@ final class TouchOverlay extends View {
         // Shared: the corners and the foot.
         pill(Action.KEY, KeyEvent.KEYCODE_F8, "STATS", 0.070f, 0.080f, 98, 46);
         pill(Action.SETTINGS, KeyEvent.KEYCODE_F10, "SETTINGS", 0.086f, 0.220f, 120, 48);
-        pill(Action.KEY, KeyEvent.KEYCODE_F9, "EXIT", 0.912f, 0.080f, 90, 46).look = Look.RED;
+        pill(Action.KEY, KeyEvent.KEYCODE_ESCAPE, "EXIT", 0.912f, 0.080f, 90, 46).look = Look.RED;
         mEditButton = pill(Action.EDIT, 0, "FATTO", 0.40f, 0.080f, 110, 44);
         mEditButton.editOnly = true;
         mEditButton.look = Look.LIGHT;
