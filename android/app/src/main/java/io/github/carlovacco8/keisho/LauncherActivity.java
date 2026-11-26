@@ -87,6 +87,64 @@ public class LauncherActivity extends Activity {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         hideSystemBars();
+        if (showLastCrash()) {
+            return;   // the launcher starts when the report is closed
+        }
+        startLauncher();
+    }
+
+    /**
+     * After a crash, show its report before anything else runs, so even a
+     * crash on every start can be read (and photographed) on the device.
+     */
+    private boolean showLastCrash() {
+        final File crash = new File(getFilesDir(), KeishoApp.CRASH_FILE);
+        if (!crash.isFile()) {
+            return false;
+        }
+        String text;
+        try {
+            text = new String(java.nio.file.Files.readAllBytes(crash.toPath()),
+                    java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            text = "(rapporto illeggibile: " + e + ")";
+        }
+        crash.delete();
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(0xFF15171C);
+        int pad = dp(16);
+        box.setPadding(pad, pad, pad, pad);
+        TextView title = new TextView(this);
+        title.setText("Keisho si è chiuso per un errore. Fai uno screenshot e mandalo:");
+        title.setTextColor(0xFFFFC857);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        box.addView(title);
+        ScrollView scroll = new ScrollView(this);
+        TextView body = new TextView(this);
+        body.setText(text);
+        body.setTextColor(Color.WHITE);
+        body.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        body.setTypeface(android.graphics.Typeface.MONOSPACE);
+        body.setTextIsSelectable(true);
+        scroll.addView(body);
+        box.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+        TextView go = new TextView(this);
+        go.setText("CONTINUA");
+        go.setTextColor(0xFF15171C);
+        go.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        go.setGravity(Gravity.CENTER);
+        go.setPadding(pad, pad / 2, pad, pad / 2);
+        go.setBackgroundColor(0xFFFFC857);
+        go.setFocusable(true);
+        go.setOnClickListener(v -> startLauncher());
+        box.addView(go, new LinearLayout.LayoutParams(-1, -2));
+        setContentView(box);
+        go.requestFocus();
+        return true;
+    }
+
+    private void startLauncher() {
         Setup.prepare(this);
         mPrefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         mArtwork = new Artwork(this);
