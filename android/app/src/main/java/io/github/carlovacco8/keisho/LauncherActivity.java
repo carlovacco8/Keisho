@@ -98,25 +98,59 @@ public class LauncherActivity extends Activity {
      * crash on every start can be read (and photographed) on the device.
      */
     private boolean showLastCrash() {
+        StringBuilder report = new StringBuilder();
         final File crash = new File(getFilesDir(), KeishoApp.CRASH_FILE);
-        if (!crash.isFile()) {
+        if (crash.isFile()) {
+            report.append(readTail(crash, 200)).append('\n');
+            crash.delete();
+        }
+        // Native crashes (the emulator itself) never reach Java's handler:
+        // ask Android how this app's processes ended since the last look.
+        android.content.SharedPreferences seen = getSharedPreferences("crash_report", MODE_PRIVATE);
+        long last = seen.getLong("last_exit", 0);
+        long newest = last;
+        boolean bad = report.length() > 0;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+                for (android.app.ApplicationExitInfo x : am.getHistoricalProcessExitReasons(null, 0, 8)) {
+                    if (x.getTimestamp() <= last) {
+                        continue;
+                    }
+                    newest = Math.max(newest, x.getTimestamp());
+                    int r = x.getReason();
+                    if (r != android.app.ApplicationExitInfo.REASON_CRASH
+                            && r != android.app.ApplicationExitInfo.REASON_CRASH_NATIVE
+                            && r != android.app.ApplicationExitInfo.REASON_ANR
+                            && r != android.app.ApplicationExitInfo.REASON_INITIALIZATION_FAILURE
+                            && r != android.app.ApplicationExitInfo.REASON_LOW_MEMORY) {
+                        continue;
+                    }
+                    bad = true;
+                    report.append("== ").append(java.text.DateFormat.getDateTimeInstance()
+                                    .format(new java.util.Date(x.getTimestamp())))
+                            .append("  processo ").append(x.getProcessName())
+                            .append("\nmotivo ").append(r).append(" (").append(exitReason(r)).append("), stato ")
+                            .append(x.getStatus()).append("\n").append(x.getDescription()).append("\n\n");
+                }
+            } catch (Throwable e) {
+                report.append("(registro uscite non disponibile: ").append(e).append(")\n");
+            }
+        }
+        seen.edit().putLong("last_exit", newest).apply();
+        if (!bad) {
             return false;
         }
-        String text;
-        try {
-            text = new String(java.nio.file.Files.readAllBytes(crash.toPath()),
-                    java.nio.charset.StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            text = "(rapporto illeggibile: " + e + ")";
-        }
-        crash.delete();
+        report.append("== keisho.log (fine) ==\n").append(readTail(new File(Setup.filesDir(this), "keisho.log"), 40));
+        report.append("\n== android.log (fine) ==\n").append(readTail(new File(Setup.filesDir(this), "android.log"), 30));
+        String text = report.toString();
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackgroundColor(0xFF15171C);
         int pad = dp(16);
         box.setPadding(pad, pad, pad, pad);
         TextView title = new TextView(this);
-        title.setText("Keisho si è chiuso per un errore. Fai uno screenshot e mandalo:");
+        title.setText("Keisho si è chiuso per un errore. Fai uno screenshot (scorri per vedere tutto) e mandalo:");
         title.setTextColor(0xFFFFC857);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         box.addView(title);
@@ -142,6 +176,35 @@ public class LauncherActivity extends Activity {
         setContentView(box);
         go.requestFocus();
         return true;
+    }
+
+    private static String exitReason(int r) {
+        switch (r) {
+            case 4: return "crash Java";
+            case 5: return "crash nativo";
+            case 6: return "ANR, bloccato";
+            case 7: return "avvio fallito";
+            case 3: return "memoria esaurita";
+            default: return "altro";
+        }
+    }
+
+    /** The last `lines` lines of a text file, or a note when it cannot be read. */
+    private static String readTail(File f, int lines) {
+        if (!f.isFile()) {
+            return "(" + f.getName() + " non trovato)\n";
+        }
+        try {
+            java.util.List<String> all = java.nio.file.Files.readAllLines(f.toPath(),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            StringBuilder b = new StringBuilder();
+            for (String l : all.subList(Math.max(0, all.size() - lines), all.size())) {
+                b.append(l).append('\n');
+            }
+            return b.toString();
+        } catch (Exception e) {
+            return "(" + f.getName() + " illeggibile: " + e + ")\n";
+        }
     }
 
     private void startLauncher() {
