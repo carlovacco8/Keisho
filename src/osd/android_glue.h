@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Small helpers that adapt the desktop program to an Android SDL activity:
-// working directory, HOME, and the TV remote's Back button.
+// working directory, HOME, the TV remote's Back button, the system folder
+// picker, overlay sizing and a lifecycle log for diagnosing the port.
 
 #pragma once
 
@@ -10,18 +11,23 @@
 
 #include <SDL3/SDL_events.h>
 
+#include <string>
+
 namespace sm2::osd {
 
 /// Call first thing in main(). Points HOME and the working directory at the
 /// app's external files directory (Android/data/<package>/files), where the
 /// Java side has already copied games.xml, the translations and a default
 /// keisho.ini. Everything Keisho writes (settings, saves, screenshots, the log)
-/// therefore lands in a folder the user can reach from a PC.
+/// therefore lands in a folder the user can reach from a PC. Also starts
+/// android.log there, which records SDL's own messages and app life-cycle
+/// events (pause, resume, surface and GL context changes).
 void android_prepare();
 
 /// Call on every polled event. Turns the remote's / pad's Back key into Esc,
-/// which opens and closes Keisho's settings overlay.
-void android_translate_event(SDL_Event* event);
+/// which opens and closes Keisho's settings overlay, and logs life-cycle
+/// events. Returns false when the event should be dropped.
+bool android_translate_event(SDL_Event* event);
 
 /// The smallest overlay scale that keeps text readable on this device, in
 /// the overlay's own units (it multiplies a 13 px font measured in ImGui
@@ -29,6 +35,19 @@ void android_translate_event(SDL_Event* event);
 /// Phones get text about 16 dp tall, tablets a little less; TVs return 0,
 /// keeping Keisho's own fit-to-screen size.
 [[nodiscard]] float android_min_ui_scale(float framebuffer_scale);
+
+/// Internal shared storage ("/storage/emulated/0"), where a built-in folder
+/// browser should start rather than in the app's private folder.
+[[nodiscard]] std::string android_storage_root();
+
+/// Opens Android's own folder chooser. Returns false when the device has none
+/// (some TV boxes), in which case the caller shows its built-in browser.
+[[nodiscard]] bool android_open_folder_picker(const std::string& initial);
+
+enum class AndroidPickResult { None, Picked, Cancelled, Unavailable };
+
+/// Polled each frame: the outcome of android_open_folder_picker(), once.
+[[nodiscard]] AndroidPickResult android_take_picked_folder(std::string* path);
 
 }  // namespace sm2::osd
 

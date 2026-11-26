@@ -39,6 +39,11 @@ import java.util.List;
 
 public class KeishoActivity extends SDLActivity {
     private static final String TAG = "Keisho";
+    private static final int REQUEST_FOLDER = 4711;
+
+    // Implemented in libmain.so (src/osd/android_glue.cpp).
+    private static native void nativeFolderPicked(String path);
+    private static native void nativeLog(String text);
 
     private File mFilesDir;
 
@@ -57,6 +62,135 @@ public class KeishoActivity extends SDLActivity {
         super.onCreate(savedInstanceState);
         requestStorageAccess();
         new Updater(this).checkAsync();
+    }
+
+    // ------------------------------------------------------------------
+    // Life-cycle log (android.log, beside keisho.log)
+    // ------------------------------------------------------------------
+
+    private static void lifecycle(String text) {
+        Log.i(TAG, text);
+        try {
+            nativeLog(text);
+        } catch (UnsatisfiedLinkError e) {
+            // libmain.so not loaded yet (very early in onCreate).
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        lifecycle("onPause");
+        super.onPause();
+    }
+
+    @Override
+    protected void onResume() {
+        lifecycle("onResume");
+        super.onResume();
+    }
+
+    @Override
+    protected void onStop() {
+        lifecycle("onStop");
+        super.onStop();
+    }
+
+    @Override
+    protected void onStart() {
+        lifecycle("onStart");
+        super.onStart();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        lifecycle("onWindowFocusChanged " + hasFocus);
+        super.onWindowFocusChanged(hasFocus);
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        lifecycle("onTrimMemory " + level);
+        super.onTrimMemory(level);
+    }
+
+    // ------------------------------------------------------------------
+    // System folder chooser for the overlay's "Browse..." buttons
+    // ------------------------------------------------------------------
+
+    /** Called from native code (any thread). False when no chooser exists. */
+    public boolean openFolderPicker(String initial) {
+        final Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && initial != null) {
+            Uri start = documentUriForPath(initial);
+            if (start != null) {
+                intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, start);
+            }
+        }
+        if (intent.resolveActivity(getPackageManager()) == null) {
+            return false;
+        }
+        runOnUiThread(() -> {
+            try {
+                startActivityForResult(intent, REQUEST_FOLDER);
+            } catch (Exception e) {
+                Log.w(TAG, "folder chooser failed", e);
+                nativeFolderPicked(null);
+            }
+        });
+        return true;
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode != REQUEST_FOLDER) {
+            super.onActivityResult(requestCode, resultCode, data);
+            return;
+        }
+        String path = "";
+        if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+            path = pathFromTreeUri(data.getData());
+            if (path == null) {
+                Toast.makeText(this, "Cartella non supportata: scegline una nella memoria del dispositivo",
+                        Toast.LENGTH_LONG).show();
+                path = "";
+            }
+        }
+        lifecycle("folder chosen: " + (path.isEmpty() ? "(none)" : path));
+        nativeFolderPicked(path);
+    }
+
+    private static Uri documentUriForPath(String path) {
+        String root = Environment.getExternalStorageDirectory().getAbsolutePath();
+        if (!path.startsWith(root)) {
+            return null;
+        }
+        String rel = path.substring(root.length());
+        if (rel.startsWith("/")) {
+            rel = rel.substring(1);
+        }
+        return DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:" + rel);
+    }
+
+    private static String pathFromTreeUri(Uri tree) {
+        try {
+            if (!"com.android.externalstorage.documents".equals(tree.getAuthority())) {
+                return null;
+            }
+            String id = DocumentsContract.getTreeDocumentId(tree);
+            int colon = id.indexOf(':');
+            if (colon < 0) {
+                return null;
+            }
+            String volume = id.substring(0, colon);
+            String rest = id.substring(colon + 1);
+            File base = "primary".equalsIgnoreCase(volume)
+                    ? Environment.getExternalStorageDirectory()
+                    : new File("/storage/" + volume);
+            return rest.isEmpty() ? base.getAbsolutePath() : new File(base, rest).getAbsolutePath();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     @Override

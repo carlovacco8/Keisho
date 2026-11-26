@@ -430,6 +430,34 @@ bool Gui::draw(Config& config, const std::vector<std::string>& gpu_names,
 {
     apply_theme(config);
     apply_scale();
+#if defined(__ANDROID__)
+    {
+        std::string                   picked;
+        const AndroidPickResult outcome = android_take_picked_folder(&picked);
+        if (outcome == AndroidPickResult::Picked) {
+            switch (m_dir_picker_target) {
+                case DirPickerTarget::Model2RomDir:  config.model2_rom_dir = picked; break;
+                case DirPickerTarget::Model1RomDir:  config.model1_rom_dir = picked; break;
+                case DirPickerTarget::Model3RomDir:  config.model3_rom_dir = picked; break;
+                case DirPickerTarget::NvramDir:      config.nvram_dir      = picked; break;
+                case DirPickerTarget::ScreenshotDir: config.screenshot_dir = picked; break;
+                case DirPickerTarget::BezelDir:      config.bezel_dir      = picked; break;
+                case DirPickerTarget::CrosshairDir:  config.crosshair_dir  = picked; break;
+                case DirPickerTarget::None: break;
+            }
+            m_dir_picker_target = DirPickerTarget::None;
+        } else if (outcome == AndroidPickResult::Cancelled) {
+            m_dir_picker_target = DirPickerTarget::None;
+        } else if (outcome == AndroidPickResult::Unavailable) {
+            // The chooser could not start after all: use the built-in browser.
+            const DirPickerTarget target = m_dir_picker_target;
+            m_dir_picker_path            = android_storage_root();
+            m_dir_picker_target          = target;
+            refresh_dir_picker_entries();
+            m_dir_picker_request_open = true;
+        }
+    }
+#endif
     if (config.language != m_language) {
         m_language         = config.language;
         m_language_pending = true;
@@ -4219,12 +4247,24 @@ void Gui::open_dir_picker(DirPickerTarget target, const std::string& initial)
 
     m_dir_picker_target = target;
 
+#if defined(__ANDROID__)
+    // Android's own folder chooser; its answer arrives in draw(). Devices
+    // without one fall through to the built-in browser below.
+    if (android_open_folder_picker(initial)) {
+        return;
+    }
+#endif
+
     std::error_code ec;
     fs::path        start(initial);
     if (initial.empty() || !fs::is_directory(start, ec)) {
         // Fall back to the home directory, then cwd.
 #ifdef _WIN32
         const char* home = std::getenv("USERPROFILE");
+#elif defined(__ANDROID__)
+        // HOME is the app's private folder; start in shared storage instead.
+        const std::string storage = android_storage_root();
+        const char*       home    = storage.c_str();
 #else
         const char* home = std::getenv("HOME");
 #endif
