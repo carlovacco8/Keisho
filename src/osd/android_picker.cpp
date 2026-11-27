@@ -21,6 +21,7 @@
 
 #include "core/config.h"
 #include "core/types.h"
+#include "osd/android_glue.h"
 #include "osd/scraper.h"
 
 #include <imgui.h>
@@ -262,6 +263,32 @@ void Gui::android_frame_hooks()
         }
     }
 
+    // The phone light gun coming and going: a short notice at the top.
+    {
+        static bool   was_on   = false;
+        static double since    = -100.0;
+        float         gx = 0.0f, gy = 0.0f;
+        bool          gt = false, gr = false;
+        const bool    on  = android_remote_gun(&gx, &gy, &gt, &gr);
+        const double  now = ImGui::GetTime();
+        if (on != was_on) {
+            was_on = on;
+            since  = now;
+        }
+        if (now - since < 3.0) {
+            const ImGuiViewport* vp   = ImGui::GetMainViewport();
+            const float          fs   = std::round(std::max(18.0f, vp->WorkSize.y * 0.035f));
+            const char*          text = on ? "PHONE GUN CONNECTED" : "PHONE GUN DISCONNECTED";
+            const ImVec2         ts   = ImGui::GetFont()->CalcTextSizeA(fs, FLT_MAX, 0.0f, text);
+            const ImVec2         pos(vp->WorkPos.x + (vp->WorkSize.x - ts.x) * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.06f);
+            ImDrawList*          fg = ImGui::GetForegroundDrawList();
+            fg->AddRectFilled(ImVec2(pos.x - fs * 0.8f, pos.y - fs * 0.4f),
+                              ImVec2(pos.x + ts.x + fs * 0.8f, pos.y + ts.y + fs * 0.4f), IM_COL32(0x1A, 0x1D, 0x23, 0xE6),
+                              fs);
+            fg->AddText(ImGui::GetFont(), fs, pos, on ? kOrange : kDim, text);
+        }
+    }
+
     // SAVES: the game is running now, open its save states.
     if (m_android_states_after_launch && !m_picker_enabled && !m_current_game.empty()) {
         m_android_states_after_launch = false;
@@ -415,6 +442,25 @@ void Gui::draw_picker_android(Config& config)
             std::snprintf(count, sizeof count, "%zu OF %zu GAMES", shown.size(), m_picker_entries.size());
         }
         list->AddText(ImGui::GetFont(), small, ImVec2(at.x, at.y + big + std::round(5.0f * u)), kDim, count);
+
+        // The phone light gun: where to point the phone's browser, or that it is in.
+        float      gx = 0.0f, gy = 0.0f;
+        bool       gt = false, gr = false;
+        const bool gun_on = android_remote_gun(&gx, &gy, &gt, &gr);
+        const std::string url = android_remote_gun_url();
+        if (gun_on || !url.empty()) {
+            const char*       head = gun_on ? "PHONE GUN CONNECTED" : "PHONE GUN: OPEN IN SAFARI";
+            const std::string line = gun_on ? std::string() : url;
+            const float       hw   = ImGui::GetFont()->CalcTextSizeA(small, FLT_MAX, 0.0f, head).x;
+            const float       lw   = ImGui::GetFont()->CalcTextSizeA(small * 1.25f, FLT_MAX, 0.0f, line.c_str()).x;
+            const float       right = top_b.x - std::round(22.0f * u);
+            list->AddText(ImGui::GetFont(), small, ImVec2(right - hw, at.y + std::round(4.0f * u)),
+                          gun_on ? kOrange : kDim, head);
+            if (!line.empty()) {
+                list->AddText(ImGui::GetFont(), small * 1.25f,
+                              ImVec2(right - lw, at.y + small + std::round(10.0f * u)), kWhite, line.c_str());
+            }
+        }
     }
     {
         // The tabs, centred. Games is this page; the others open the settings.

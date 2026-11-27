@@ -157,6 +157,7 @@ jobs:
           cp data/games.xml android/app/assets/
           cp -r data/lang android/app/assets/
           cp -r android/covers android/app/assets/covers
+          cp -r android/gun android/app/assets/gun
 
       - uses: gradle/actions/setup-gradle@v4
         if: steps.decide.outputs.build == 'true'

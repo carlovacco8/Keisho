@@ -81,6 +81,14 @@ void android_menu_changed(bool open);
 /// used by the quick save / load keys.
 [[nodiscard]] std::string android_quick_slot();
 
+/// The phone light gun (GunServer.java): while a phone has sent its aim in
+/// the last moment, fills the aim (fractions of the game picture, outside
+/// 0..1 off screen), trigger and reload, and returns true.
+[[nodiscard]] bool android_remote_gun(float* x, float* y, bool* trigger, bool* reload);
+
+/// The address to open on the phone ("" without a local network).
+[[nodiscard]] std::string android_remote_gun_url();
+
 enum class AndroidPickResult { None, Picked, Cancelled, Unavailable };
 
 /// Polled each frame: the outcome of android_open_folder_picker(), once.

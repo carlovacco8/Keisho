@@ -1427,10 +1427,20 @@ index af257a3..d398c21 100644
  
  }  // namespace sm2::i18n
 diff --git a/src/osd/input.cpp b/src/osd/input.cpp
-index db63222..6853745 100644
+index db63222..0724755 100644
 --- a/src/osd/input.cpp
 +++ b/src/osd/input.cpp
-@@ -1258,6 +1258,22 @@ Input::PadShortcuts Input::update_pad_shortcuts(bool enabled)
+@@ -27,6 +27,9 @@
+ #endif
+ 
+ #include "render/geometry.h"
++#if defined(__ANDROID__)
++#include "osd/android_glue.h"
++#endif
+ 
+ #include <algorithm>
+ #include <cctype>
+@@ -1258,6 +1261,22 @@ Input::PadShortcuts Input::update_pad_shortcuts(bool enabled)
  
  bool Input::operator_chord(const Pad& pad, u8* port0)
  {
@@ -1453,6 +1463,40 @@ index db63222..6853745 100644
      if (!SDL_GetGamepadButton(pad.handle, SDL_GAMEPAD_BUTTON_GUIDE)) {
          return false;
      }
+@@ -2126,6 +2145,33 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
+         aim_from(1, p2);
+     }
+ 
++#if defined(__ANDROID__)
++    // The phone light gun (M2 NEXUS): while a phone is sending, it is player
++    // one's gun, over the mouse and the pad cursor.
++    {
++        float rx = 0.5f;
++        float ry = 0.5f;
++        bool  rt = false;
++        bool  rr = false;
++        if (android_remote_gun(&rx, &ry, &rt, &rr)) {
++            GunInput gi;
++            gi.x     = rx;
++            gi.y     = ry;
++            gi.win_x = rx;
++            gi.win_y = ry;
++            if (has_missile) {
++                gi.trigger = rt;
++                gi.missile = rr;
++            } else {
++                gi.trigger = rt || rr;
++                gi.reload  = rr;
++            }
++            p1          = gi;
++            on_mouse[0] = false;
++        }
++    }
++#endif
++
+     // Record the aim (before the reload snap) for the crosshair overlay. Player 2's
+     // shows only when a second gun or pad aims it.
+     const bool p2_active = on_gun[1] || pad_for(1) != nullptr;
 diff --git a/src/rom/rom_loader.cpp b/src/rom/rom_loader.cpp
 index 0b791ce..605facb 100644
 --- a/src/rom/rom_loader.cpp

@@ -534,3 +534,67 @@ Java_io_github_carlovacco8_keisho_KeishoActivity_nativeLog(JNIEnv* env, jclass, 
 }
 
 #endif  // __ANDROID__
+
+// ---------------------------------------------------------------------------
+// Phone light gun: GunServer.java hands over each aim the phone sends.
+// ---------------------------------------------------------------------------
+
+namespace {
+std::atomic<float>    g_rgun_x{0.5f};
+std::atomic<float>    g_rgun_y{0.5f};
+std::atomic<int>      g_rgun_buttons{0};
+std::atomic<uint64_t> g_rgun_ms{0};
+std::mutex            g_rgun_url_mutex;
+std::string           g_rgun_url;
+}  // namespace
+
+namespace sm2::osd {
+
+bool android_remote_gun(float* x, float* y, bool* trigger, bool* reload)
+{
+    const uint64_t last = g_rgun_ms.load();
+    // The page sends at least every 250 ms while open, so a longer silence
+    // means the phone was put down or its page closed.
+    if (last == 0 || SDL_GetTicks() - last > 1500) {
+        return false;
+    }
+    const int b = g_rgun_buttons.load();
+    *x       = g_rgun_x.load();
+    *y       = g_rgun_y.load();
+    *trigger = (b & 1) != 0;
+    *reload  = (b & 2) != 0;
+    return true;
+}
+
+std::string android_remote_gun_url()
+{
+    std::lock_guard<std::mutex> lock(g_rgun_url_mutex);
+    return g_rgun_url;
+}
+
+}  // namespace sm2::osd
+
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_carlovacco8_keisho_KeishoActivity_nativeRemoteGun(JNIEnv*, jclass, jfloat x, jfloat y,
+                                                                 jint buttons)
+{
+    g_rgun_x.store(x);
+    g_rgun_y.store(y);
+    g_rgun_buttons.store(buttons);
+    g_rgun_ms.store(SDL_GetTicks());
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_carlovacco8_keisho_KeishoActivity_nativeRemoteGunUrl(JNIEnv* env, jclass, jstring url)
+{
+    std::string text;
+    if (url != nullptr) {
+        const char* chars = env->GetStringUTFChars(url, nullptr);
+        if (chars != nullptr) {
+            text = chars;
+            env->ReleaseStringUTFChars(url, chars);
+        }
+    }
+    std::lock_guard<std::mutex> lock(g_rgun_url_mutex);
+    g_rgun_url = std::move(text);
+}

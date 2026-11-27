@@ -63,6 +63,8 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
     private static native void nativeTouchAxis(int axis, float value);
     private static native void nativeTouchButton(int button, boolean down);
     private static native void nativeSetSlot(int slot);
+    private static native void nativeRemoteGun(float x, float y, int buttons);
+    private static native void nativeRemoteGunUrl(String url);
 
     private final Handler mMain = new Handler(Looper.getMainLooper());
     private File mFilesDir;
@@ -79,6 +81,7 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
     // controls (see dispatchKeyEvent): SDL does not take them itself.
     private boolean mBridge;
     private int mHatX, mHatY;
+    private GunServer mGun;   // the phone light gun (assets/gun/gun.html)
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -95,6 +98,7 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
             attachPadWhenReady();
         }
         KeishoApp.showLastCrash(this);
+        startGunServer();
         if (mRom == null) {
             new Updater(this).checkAsync(false);
         }
@@ -436,6 +440,47 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
     protected void onResume() {
         lifecycle("onResume");
         super.onResume();
+        publishGunUrl();
+    }
+
+    // ------------------------------------------------------------------
+    // Phone light gun
+    // ------------------------------------------------------------------
+
+    private void startGunServer() {
+        mGun = new GunServer(this, new GunServer.Sink() {
+            @Override
+            public void aim(float x, float y, int buttons) {
+                try {
+                    nativeRemoteGun(x, y, buttons);
+                } catch (UnsatisfiedLinkError ignored) {
+                    // Native side not loaded (yet).
+                }
+            }
+
+            @Override
+            public void connected(boolean on) {
+                Log.i(TAG, "phone gun " + (on ? "connected" : "gone"));
+            }
+        });
+        mGun.start();
+        publishGunUrl();
+    }
+
+    /** The address shown in the game list; the network may come up late. */
+    private final Runnable mGunUrlTick = this::publishGunUrl;
+
+    private void publishGunUrl() {
+        mMain.removeCallbacks(mGunUrlTick);
+        mMain.postDelayed(mGunUrlTick, 15000);
+        new Thread(() -> {
+            String url = GunServer.url();
+            try {
+                nativeRemoteGunUrl(url == null ? "" : url);
+            } catch (UnsatisfiedLinkError ignored) {
+                // Native side not loaded (yet).
+            }
+        }, "gun-url").start();
     }
 
     @Override
