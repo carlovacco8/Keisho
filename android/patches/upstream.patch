@@ -277,7 +277,7 @@ index 86a9858..3274dea 100644
      install(TARGETS keisho RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
      install(FILES "${CMAKE_SOURCE_DIR}/data/games.xml"
 diff --git a/src/main.cpp b/src/main.cpp
-index b4e37dc..98d55a8 100644
+index b4e37dc..811bef8 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -61,6 +61,16 @@
@@ -484,7 +484,7 @@ index b4e37dc..98d55a8 100644
                  // Let ImGui see every event, bar a key the System tab is
                  // binding, which its keyboard navigation would also press.
                  if (event.type != SDL_EVENT_KEY_DOWN || !gui.visible() || !gui.capturing_key()) {
-@@ -2396,6 +2518,18 @@ int main(int argc, char** argv)
+@@ -2396,6 +2518,25 @@ int main(int argc, char** argv)
                  }
  
                  switch (event.type) {
@@ -493,6 +493,13 @@ index b4e37dc..98d55a8 100644
 +                        // Save now: SDL stops this thread while the app is in
 +                        // the background, and Android may end it there.
 +                        android_autosave("background");
++                        // The NVRAM/EEPROM too (operator settings such as
++                        // Manx TT's cabinet type), else a kill in the
++                        // background loses them.
++                        if (machine_any != nullptr) {
++                            async_soft.wait();
++                            machine_any->save_nvram();
++                        }
 +                        break;
 +                    case SDL_EVENT_DID_ENTER_FOREGROUND:
 +                        // Back from the background the audio output is
@@ -503,7 +510,7 @@ index b4e37dc..98d55a8 100644
                      case SDL_EVENT_QUIT:
                          running = false;
                          break;
-@@ -2416,7 +2550,7 @@ int main(int argc, char** argv)
+@@ -2416,7 +2557,7 @@ int main(int argc, char** argv)
                          } else if (is_hotkey(event.key, Config::Hotkey::Exit)) {
                              // Return to the game picker when there is one,
                              // otherwise quit. Serviced after the event loop.
@@ -512,7 +519,7 @@ index b4e37dc..98d55a8 100644
                                  return_to_picker_requested = true;
                              } else {
                                  running = false;
-@@ -2443,10 +2577,10 @@ int main(int argc, char** argv)
+@@ -2443,10 +2584,10 @@ int main(int argc, char** argv)
                                         && machine_any != nullptr) {
                                  // Quick-save / quick-load the reserved slot. Only
                                  // with a game running; serviced between frames.
@@ -525,7 +532,7 @@ index b4e37dc..98d55a8 100644
                              } else if (is_hotkey(event.key, Config::Hotkey::Fps) && !event.key.repeat) {
                                  options.config.show_fps = !options.config.show_fps;
                              } else if (is_hotkey(event.key, Config::Hotkey::FastForward) && !event.key.repeat) {
-@@ -2474,6 +2608,14 @@ int main(int argc, char** argv)
+@@ -2474,6 +2615,14 @@ int main(int argc, char** argv)
                          // Hotplug and axis motion events are passed on even
                          // with the overlay open, since its calibration needs them.
                          input.handle_event(event);
@@ -540,7 +547,7 @@ index b4e37dc..98d55a8 100644
                          break;
                  }
              }
-@@ -2487,7 +2629,7 @@ int main(int argc, char** argv)
+@@ -2487,7 +2636,7 @@ int main(int argc, char** argv)
                  input.update_pad_shortcuts(options.config.pad_shortcuts);
              if (pad_shortcuts.exit) {
                  // As Esc: back to the games when there are some, else quit.
@@ -549,7 +556,7 @@ index b4e37dc..98d55a8 100644
                      return_to_picker_requested = true;
                  } else {
                      running = false;
-@@ -2498,9 +2640,9 @@ int main(int argc, char** argv)
+@@ -2498,9 +2647,9 @@ int main(int argc, char** argv)
              }
              if (!gui.visible() && machine_any != nullptr) {
                  if (pad_shortcuts.save) {
@@ -561,7 +568,7 @@ index b4e37dc..98d55a8 100644
                  }
              }
  
-@@ -2535,7 +2677,14 @@ int main(int argc, char** argv)
+@@ -2535,7 +2684,14 @@ int main(int argc, char** argv)
  
              // Opening the overlay pauses the game; the manual pause holds
              // independently. Audio and the pacer follow on each transition.
@@ -576,21 +583,21 @@ index b4e37dc..98d55a8 100644
              if (effective_pause != audio_paused_state) {
                  audio_paused_state = effective_pause;
                  audio.set_paused(effective_pause);
-@@ -2736,7 +2885,13 @@ int main(int argc, char** argv)
+@@ -2736,7 +2892,13 @@ int main(int argc, char** argv)
                  }
                  {
                      auto scope = core::maybe_scope(stage_run_frame, profile_sample);
 +#if defined(__ANDROID__)
 +                    const u64 emulation_start = SDL_GetTicksNS();
-                     machine_any->run_frame();
++                    machine_any->run_frame();
 +                    osd::android_emulation_time(SDL_GetTicksNS() - emulation_start);
 +#else
-+                    machine_any->run_frame();
+                     machine_any->run_frame();
 +#endif
                  }
                  if (!rewinding) {
                      rewind.capture(*machine_any);
-@@ -2802,6 +2957,21 @@ int main(int argc, char** argv)
+@@ -2802,6 +2964,21 @@ int main(int argc, char** argv)
                  }
              }
  
@@ -612,7 +619,7 @@ index b4e37dc..98d55a8 100644
              // The scope closes before the continue below so a skipped frame's
              // SDL_Delay is not folded into present_wait.
              bool begin_ok;
-@@ -3110,6 +3280,15 @@ int main(int argc, char** argv)
+@@ -3110,6 +3287,15 @@ int main(int argc, char** argv)
                      g.timestamp = s.timestamp;
                      gui_slots.push_back(std::move(g));
                  }
@@ -628,7 +635,7 @@ index b4e37dc..98d55a8 100644
                  gui.set_state_slots(true, std::move(gui_slots));
              } else {
                  gui.set_state_slots(machine_any != nullptr, {});
-@@ -3122,6 +3301,20 @@ int main(int argc, char** argv)
+@@ -3122,6 +3308,20 @@ int main(int argc, char** argv)
              const bool gui_active =
                  gui.draw(options.config, gpu_names, pacer.measured_hz(),
                          use_software_renderer ? "Software" : gpu_backend_name, &input);
@@ -649,7 +656,7 @@ index b4e37dc..98d55a8 100644
              // An overlay Save/Load/Delete button is serviced like the hotkeys.
              if (std::optional<osd::Gui::StateRequest> req = gui.take_pending_state_request()) {
                  using A  = osd::Gui::StateRequest::Action;
-@@ -3139,8 +3332,13 @@ int main(int argc, char** argv)
+@@ -3139,8 +3339,13 @@ int main(int argc, char** argv)
              if (!settings_was_visible && gui.visible()) {
                  list_inputs_at_open = list_inputs();
              }
@@ -664,7 +671,7 @@ index b4e37dc..98d55a8 100644
                  show_picker();
              }
              settings_was_visible = gui.visible();
-@@ -3164,6 +3362,9 @@ int main(int argc, char** argv)
+@@ -3164,6 +3369,9 @@ int main(int argc, char** argv)
              // submitted: save NVRAM, wait for the GPU, drop the machine.
              if (return_to_picker_requested) {
                  return_to_picker_requested = false;
@@ -674,7 +681,7 @@ index b4e37dc..98d55a8 100644
                  async_soft.forget_machine();
                  if (machine_any != nullptr) {
                      machine_any->save_nvram();
-@@ -3349,6 +3550,9 @@ int main(int argc, char** argv)
+@@ -3349,6 +3557,9 @@ int main(int argc, char** argv)
                  }
              }
  
@@ -684,7 +691,7 @@ index b4e37dc..98d55a8 100644
              // Last thing in the loop, so the wait absorbs the whole frame's cost.
              frames_written_off += pacer.wait();
  
-@@ -3368,6 +3572,10 @@ int main(int argc, char** argv)
+@@ -3368,6 +3579,10 @@ int main(int argc, char** argv)
              }
          }
  
@@ -1419,6 +1426,33 @@ index af257a3..d398c21 100644
  }
  
  }  // namespace sm2::i18n
+diff --git a/src/osd/input.cpp b/src/osd/input.cpp
+index db63222..6853745 100644
+--- a/src/osd/input.cpp
++++ b/src/osd/input.cpp
+@@ -1258,6 +1258,22 @@ Input::PadShortcuts Input::update_pad_shortcuts(bool enabled)
+ 
+ bool Input::operator_chord(const Pad& pad, u8* port0)
+ {
++#if defined(__ANDROID__)
++    // Android TV keeps Guide (Home) for itself, so Select stands in for it:
++    // Select + L1 or L3 is Service, Select + R1 or R3 is Test. Select alone
++    // stays Coin; only a held shoulder or stick click makes it the chord.
++    if (SDL_GetGamepadButton(pad.handle, SDL_GAMEPAD_BUTTON_BACK)) {
++        const bool service = SDL_GetGamepadButton(pad.handle, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)
++                          || SDL_GetGamepadButton(pad.handle, SDL_GAMEPAD_BUTTON_LEFT_STICK);
++        const bool test    = SDL_GetGamepadButton(pad.handle, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)
++                          || SDL_GetGamepadButton(pad.handle, SDL_GAMEPAD_BUTTON_RIGHT_STICK);
++        if (service) *port0 &= static_cast<u8>(~kService);
++        if (test)    *port0 &= static_cast<u8>(~kTest);
++        if (service || test) {
++            return true;
++        }
++    }
++#endif
+     if (!SDL_GetGamepadButton(pad.handle, SDL_GAMEPAD_BUTTON_GUIDE)) {
+         return false;
+     }
 diff --git a/src/rom/rom_loader.cpp b/src/rom/rom_loader.cpp
 index 0b791ce..605facb 100644
 --- a/src/rom/rom_loader.cpp
