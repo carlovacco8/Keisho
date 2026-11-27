@@ -2478,6 +2478,13 @@ int main(int argc, char** argv)
                         // Save now: SDL stops this thread while the app is in
                         // the background, and Android may end it there.
                         android_autosave("background");
+                        // The NVRAM/EEPROM too (operator settings such as
+                        // Manx TT's cabinet type), else a kill in the
+                        // background loses them.
+                        if (machine_any != nullptr) {
+                            async_soft.wait();
+                            machine_any->save_nvram();
+                        }
                         break;
 #endif
                     case SDL_EVENT_QUIT:

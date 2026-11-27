@@ -1258,6 +1258,22 @@ Input::PadShortcuts Input::update_pad_shortcuts(bool enabled)
 
 bool Input::operator_chord(const Pad& pad, u8* port0)
 {
+#if defined(__ANDROID__)
+    // Android TV keeps Guide (Home) for itself, so Select stands in for it:
+    // Select + L1 or L3 is Service, Select + R1 or R3 is Test. Select alone
+    // stays Coin; only a held shoulder or stick click makes it the chord.
+    if (SDL_GetGamepadButton(pad.handle, SDL_GAMEPAD_BUTTON_BACK)) {
+        const bool service = SDL_GetGamepadButton(pad.handle, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)
+                          || SDL_GetGamepadButton(pad.handle, SDL_GAMEPAD_BUTTON_LEFT_STICK);
+        const bool test    = SDL_GetGamepadButton(pad.handle, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)
+                          || SDL_GetGamepadButton(pad.handle, SDL_GAMEPAD_BUTTON_RIGHT_STICK);
+        if (service) *port0 &= static_cast<u8>(~kService);
+        if (test)    *port0 &= static_cast<u8>(~kTest);
+        if (service || test) {
+            return true;
+        }
+    }
+#endif
     if (!SDL_GetGamepadButton(pad.handle, SDL_GAMEPAD_BUTTON_GUIDE)) {
         return false;
     }
