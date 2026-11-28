@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# The phone light gun's HTTPS certificate (GunServer.java), made fresh at each
-# build. iOS refuses, even after "Visit this website", any server certificate
+# The phone light gun's HTTPS certificate (GunServer.java). One is kept in
+# android/gun so Safari's exception survives app updates; the build makes one
+# only if it is missing. Run again before it expires (800 days). iOS refuses, even after "Visit this website", any server certificate
 # valid for more than 825 days or without the serverAuth extended key usage,
 # so this one lasts 800 days and says it is a TLS server.
 set -euo pipefail
