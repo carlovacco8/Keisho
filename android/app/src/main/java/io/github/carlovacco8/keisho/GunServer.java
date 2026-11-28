@@ -70,7 +70,8 @@ final class GunServer {
     private final Sink    sink;
     private ServerSocket     server;
     private ServerSocket     plain;
-    private SSLSocketFactory tls;
+    private SSLSocketFactory tls;        // the shipped certificate, if the home one fails
+    private final GunCerts   certs;
     private volatile int     requests;
     private volatile boolean running;
     private volatile int     clients;
@@ -79,6 +80,7 @@ final class GunServer {
     GunServer(Context context, Sink sink) {
         this.context = context.getApplicationContext();
         this.sink    = sink;
+        this.certs   = new GunCerts(this.context.getFilesDir());
     }
 
     /** The address to type on the phone, or null without a local network. */
@@ -135,6 +137,14 @@ final class GunServer {
         }
         Log.i(TAG, "listening on " + url());
         sink.status("Waiting for the phone");
+        // Make the home certificate now, not while the phone waits.
+        try {
+            certs.authority();
+            String ip = localAddress();
+            if (ip != null) certs.serverFor(InetAddress.getByName(ip));
+        } catch (Exception e) {
+            Log.w(TAG, "home certificate not made", e);
+        }
         Thread p = new Thread(this::servePlain, "M2Gun-plain");
         p.setDaemon(true);
         p.start();
@@ -171,7 +181,13 @@ final class GunServer {
     private void handleTls(Socket raw) {
         try {
             raw.setSoTimeout(15000);
-            SSLSocket s = (SSLSocket) tls.createSocket(raw, raw.getInetAddress().getHostAddress(), raw.getPort(), true);
+            SSLSocketFactory f = tls;
+            try {
+                f = certs.serverFor(raw.getLocalAddress());
+            } catch (Exception e) {
+                Log.w(TAG, "home certificate unavailable, using the shipped one", e);
+            }
+            SSLSocket s = (SSLSocket) f.createSocket(raw, raw.getInetAddress().getHostAddress(), raw.getPort(), true);
             s.setUseClientMode(false);
             s.startHandshake();
             handle(s);
@@ -202,18 +218,47 @@ final class GunServer {
                     try (Socket sock = s) {
                         sock.setSoTimeout(10000);
                         InputStream in = sock.getInputStream();
+                        String request = readLine(in);
                         for (String line; (line = readLine(in)) != null && !line.isEmpty(); ) {
                             // headers ignored
                         }
+                        String path = "/";
+                        if (request != null) {
+                            String[] parts = request.split(" ");
+                            if (parts.length > 1) path = parts[1];
+                        }
+                        OutputStream out = sock.getOutputStream();
+                        if (path.startsWith("/m2nexus.cer")) {
+                            byte[] ca;
+                            try {
+                                ca = certs.authority();
+                            } catch (Exception e) {
+                                reply(out, "500 Internal Server Error", "text/plain",
+                                      ("certificate: " + e).getBytes(StandardCharsets.UTF_8));
+                                return;
+                            }
+                            sink.status("Home certificate sent to the phone");
+                            reply(out, "200 OK", "application/x-x509-ca-cert", ca);
+                            return;
+                        }
                         String to = url();
-                        String html = "<!DOCTYPE html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
-                                + "<body style='background:#111317;color:#fff;font:18px -apple-system,sans-serif;padding:24px'>"
-                                + "<h2 style='color:#e8a33a'>M2 NEXUS raggiunto</h2>"
-                                + "<p>Il telefono vede la Shield. Ora apri la pistola:</p>"
-                                + "<p><a style='color:#e8a33a;font-size:22px' href='" + to + "'>" + to + "</a></p>";
+                        String html = "<!DOCTYPE html><meta charset=utf-8>"
+                                + "<meta name=viewport content='width=device-width, initial-scale=1'>"
+                                + "<body style='background:#111317;color:#fff;font:17px/1.45 -apple-system,sans-serif;padding:22px'>"
+                                + "<h2 style='color:#e8a33a;margin-top:0'>M2 NEXUS raggiunto</h2>"
+                                + "<p>Il telefono vede la Shield. Pistola:<br><a style='color:#e8a33a;font-size:20px' href='" + to + "'>" + to + "</a></p>"
+                                + "<h3 style='color:#e8a33a'>Togliere per sempre l’avviso di Safari</h3>"
+                                + "<ol style='padding-left:20px'>"
+                                + "<li><a style='color:#e8a33a' href='/m2nexus.cer'>Scarica il certificato di casa</a> e tocca <b>Consenti</b>.</li>"
+                                + "<li>Apri <b>Impostazioni</b>: in alto compare <b>Profilo scaricato</b>. Toccalo e scegli <b>Installa</b> (ti chiede il codice dell’iPhone).</li>"
+                                + "<li>Vai in <b>Impostazioni → Generali → Info → Impostazioni attendibilità certificati</b> e attiva <b>M2 NEXUS home certificate</b>.</li>"
+                                + "<li>Torna qui e apri la pistola: niente più avviso.</li>"
+                                + "</ol>"
+                                + "<p style='color:#80858e;font-size:14px'>Il certificato è creato da questa Shield e la sua chiave non esce mai da lì. "
+                                + "Vale solo per gli indirizzi della rete di casa, non per i siti internet. "
+                                + "Per toglierlo: Impostazioni → Generali → VPN e gestione dispositivi.</p>";
                         sink.status("Phone reached the Shield (test page)");
-                        reply(sock.getOutputStream(), "200 OK", "text/html; charset=utf-8",
-                              html.getBytes(StandardCharsets.UTF_8));
+                        reply(out, "200 OK", "text/html; charset=utf-8", html.getBytes(StandardCharsets.UTF_8));
                     } catch (IOException ignored) {
                     }
                 }, "M2Gun-plain-client");

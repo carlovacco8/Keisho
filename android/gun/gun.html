@@ -71,6 +71,8 @@
      punta al centro dello schermo e premi <b>RICENTRA</b>.</p>
   <button id="go">TOCCA PER INIZIARE</button>
   <p id="err"></p>
+  <p style="font-size:14px;color:#80858e">Stanco dell’avviso di Safari?
+     <a id="nowarn" style="color:#e8a33a" href="#">Toglilo per sempre</a></p>
 </div>
 
 <div id="cal">
@@ -346,6 +348,8 @@
     try { if ('wakeLock' in navigator && document.visibilityState === 'visible') lock = await navigator.wakeLock.request('screen'); } catch (e) {}
   }
   document.addEventListener('visibilitychange', keepAwake);
+
+  $('nowarn').href = 'http://' + location.hostname + ':18080/';
 
   // ---- start -------------------------------------------------------------------
   $('go').addEventListener('click', async () => {
