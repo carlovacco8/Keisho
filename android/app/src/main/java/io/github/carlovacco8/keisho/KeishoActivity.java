@@ -82,7 +82,9 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
     // controls (see dispatchKeyEvent): SDL does not take them itself.
     private boolean mBridge;
     private int mHatX, mHatY;
-    private GunServer mGun;   // the phone light gun (assets/gun/gun.html)
+    // The phone light gun (assets/gun/gun.html): one per process, as the
+    // activity can be created again while the old server still holds its port.
+    private static GunServer sGun;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -449,7 +451,11 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
     // ------------------------------------------------------------------
 
     private void startGunServer() {
-        mGun = new GunServer(this, new GunServer.Sink() {
+        if (sGun != null) {
+            publishGunUrl();
+            return;
+        }
+        sGun = new GunServer(this, new GunServer.Sink() {
             @Override
             public void aim(float x, float y, int buttons) {
                 try {
@@ -468,13 +474,15 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
             public void status(String text) {
                 Log.i(TAG, "phone gun: " + text);
                 try {
+                    String url = GunServer.url();   // the port is known once bound
+                    nativeRemoteGunUrl(url == null ? "" : url);
                     nativeRemoteGunStatus(text);
                 } catch (UnsatisfiedLinkError ignored) {
                     // Native side not loaded (yet).
                 }
             }
         });
-        mGun.start();
+        sGun.start();
         publishGunUrl();
     }
 

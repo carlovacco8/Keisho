@@ -50,7 +50,12 @@ import javax.net.ssl.SSLSocketFactory;
  */
 final class GunServer {
     private static final String TAG  = "M2Gun";
-    static final int            PORT = 8443;
+    // Not 8443 or 8080: the Shield's Chromecast service already holds 8443.
+    // The first free one of these is used.
+    private static final int[] PORTS       = {18443, 28443, 38443, 48443};
+    private static final int[] PLAIN_PORTS = {18080, 28080, 38080, 48080};
+    private static volatile int port      = PORTS[0];
+    private static volatile int plainPort = PLAIN_PORTS[0];
 
     interface Sink {
         void aim(float x, float y, int buttons);
@@ -59,7 +64,7 @@ final class GunServer {
         void status(String text);
     }
 
-    static final int PLAIN_PORT = 8080;
+
 
     private final Context context;
     private final Sink    sink;
@@ -79,7 +84,7 @@ final class GunServer {
     /** The address to type on the phone, or null without a local network. */
     static String url() {
         String ip = localAddress();
-        return ip == null ? null : "https://" + ip + ":" + PORT;
+        return ip == null ? null : "https://" + ip + ":" + port;
     }
 
     private static String localAddress() {
@@ -121,7 +126,8 @@ final class GunServer {
         try {
             page   = readAsset("gun/gun.html");
             tls    = sslContext().getSocketFactory();
-            server = new ServerSocket(PORT);
+            server = bindFirst(PORTS);
+            port   = server.getLocalPort();
         } catch (Exception e) {
             Log.w(TAG, "server not started", e);
             sink.status("Server error: " + e.getMessage());
@@ -147,6 +153,21 @@ final class GunServer {
         }
     }
 
+    private static ServerSocket bindFirst(int[] ports) throws IOException {
+        IOException last = null;
+        for (int p : ports) {
+            try {
+                ServerSocket s = new ServerSocket();
+                s.setReuseAddress(true);
+                s.bind(new java.net.InetSocketAddress(p));
+                return s;
+            } catch (IOException e) {
+                last = e;
+            }
+        }
+        throw last;
+    }
+
     private void handleTls(Socket raw) {
         try {
             raw.setSoTimeout(15000);
@@ -168,12 +189,13 @@ final class GunServer {
     }
 
     /**
-     * http://address:8080 — a check that the phone reaches the Shield at all,
+     * http://address:18080 — a check that the phone reaches the Shield at all,
      * and a link on to the secure page.
      */
     private void servePlain() {
         try {
-            plain = new ServerSocket(PLAIN_PORT);
+            plain     = bindFirst(PLAIN_PORTS);
+            plainPort = plain.getLocalPort();
             while (running) {
                 Socket s = plain.accept();
                 Thread t = new Thread(() -> {
