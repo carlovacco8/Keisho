@@ -89,6 +89,9 @@ void android_menu_changed(bool open);
 /// The address to open on the phone ("" without a local network).
 [[nodiscard]] std::string android_remote_gun_url();
 
+/// What the phone gun server last did ("" before it starts).
+[[nodiscard]] std::string android_remote_gun_status();
+
 enum class AndroidPickResult { None, Picked, Cancelled, Unavailable };
 
 /// Polled each frame: the outcome of android_open_folder_picker(), once.

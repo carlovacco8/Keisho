@@ -460,6 +460,13 @@ void Gui::draw_picker_android(Config& config)
                 list->AddText(ImGui::GetFont(), small * 1.25f,
                               ImVec2(right - lw, at.y + small + std::round(10.0f * u)), kWhite, line.c_str());
             }
+            // What the server last saw, to tell where a phone gets stuck.
+            const std::string st = android_remote_gun_status();
+            if (!gun_on && !st.empty()) {
+                const float sw = ImGui::GetFont()->CalcTextSizeA(small * 0.9f, FLT_MAX, 0.0f, st.c_str()).x;
+                list->AddText(ImGui::GetFont(), small * 0.9f,
+                              ImVec2(right - sw, at.y + small * 2.25f + std::round(16.0f * u)), kDim, st.c_str());
+            }
         }
     }
     {

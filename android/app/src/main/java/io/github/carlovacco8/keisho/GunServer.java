@@ -27,9 +27,12 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
+import java.net.ServerSocket;
+
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLServerSocket;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 
 /**
  * The phone light gun: a small HTTPS server on the local network. A phone
@@ -52,11 +55,18 @@ final class GunServer {
     interface Sink {
         void aim(float x, float y, int buttons);
         void connected(boolean on);
+        /** What the server last did, shown under the address on the Shield. */
+        void status(String text);
     }
+
+    static final int PLAIN_PORT = 8080;
 
     private final Context context;
     private final Sink    sink;
-    private SSLServerSocket server;
+    private ServerSocket     server;
+    private ServerSocket     plain;
+    private SSLSocketFactory tls;
+    private volatile int     requests;
     private volatile boolean running;
     private volatile int     clients;
     private byte[] page;
@@ -102,6 +112,7 @@ final class GunServer {
         running = false;
         try {
             if (server != null) server.close();
+            if (plain != null) plain.close();
         } catch (IOException ignored) {
         }
     }
@@ -109,16 +120,86 @@ final class GunServer {
     private void serve() {
         try {
             page   = readAsset("gun/gun.html");
-            server = (SSLServerSocket) sslContext().getServerSocketFactory().createServerSocket(PORT);
-            Log.i(TAG, "listening on " + url());
+            tls    = sslContext().getSocketFactory();
+            server = new ServerSocket(PORT);
+        } catch (Exception e) {
+            Log.w(TAG, "server not started", e);
+            sink.status("Server error: " + e.getMessage());
+            return;
+        }
+        Log.i(TAG, "listening on " + url());
+        sink.status("Waiting for the phone");
+        Thread p = new Thread(this::servePlain, "M2Gun-plain");
+        p.setDaemon(true);
+        p.start();
+        // Plain accept; the TLS handshake runs on each connection's own thread,
+        // so a browser that opens a connection and stays silent (Safari does,
+        // to be ready) never holds up the next one.
+        try {
             while (running) {
-                Socket s = server.accept();
-                Thread t = new Thread(() -> handle(s), "M2Gun-client");
+                Socket raw = server.accept();
+                Thread t = new Thread(() -> handleTls(raw), "M2Gun-client");
                 t.setDaemon(true);
                 t.start();
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             if (running) Log.w(TAG, "server stopped", e);
+        }
+    }
+
+    private void handleTls(Socket raw) {
+        try {
+            raw.setSoTimeout(15000);
+            SSLSocket s = (SSLSocket) tls.createSocket(raw, raw.getInetAddress().getHostAddress(), raw.getPort(), true);
+            s.setUseClientMode(false);
+            s.startHandshake();
+            handle(s);
+        } catch (IOException e) {
+            String m = String.valueOf(e.getMessage());
+            // Before the certificate is accepted the browser drops every
+            // handshake: that is expected, say so plainly.
+            sink.status(requests == 0 ? "Phone reached the Shield: accept the certificate warning"
+                                      : "Connection error: " + m);
+            try {
+                raw.close();
+            } catch (IOException ignored) {
+            }
+        }
+    }
+
+    /**
+     * http://address:8080 — a check that the phone reaches the Shield at all,
+     * and a link on to the secure page.
+     */
+    private void servePlain() {
+        try {
+            plain = new ServerSocket(PLAIN_PORT);
+            while (running) {
+                Socket s = plain.accept();
+                Thread t = new Thread(() -> {
+                    try (Socket sock = s) {
+                        sock.setSoTimeout(10000);
+                        InputStream in = sock.getInputStream();
+                        for (String line; (line = readLine(in)) != null && !line.isEmpty(); ) {
+                            // headers ignored
+                        }
+                        String to = url();
+                        String html = "<!DOCTYPE html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
+                                + "<body style='background:#111317;color:#fff;font:18px -apple-system,sans-serif;padding:24px'>"
+                                + "<h2 style='color:#e8a33a'>M2 NEXUS raggiunto</h2>"
+                                + "<p>Il telefono vede la Shield. Ora apri la pistola:</p>"
+                                + "<p><a style='color:#e8a33a;font-size:22px' href='" + to + "'>" + to + "</a></p>";
+                        sink.status("Phone reached the Shield (test page)");
+                        reply(sock.getOutputStream(), "200 OK", "text/html; charset=utf-8",
+                              html.getBytes(StandardCharsets.UTF_8));
+                    } catch (IOException ignored) {
+                    }
+                }, "M2Gun-plain-client");
+                t.setDaemon(true);
+                t.start();
+            }
+        } catch (IOException e) {
+            if (running) Log.w(TAG, "plain server stopped", e);
         }
     }
 
@@ -153,7 +234,7 @@ final class GunServer {
     private void handle(Socket s) {
         try (Socket sock = s) {
             sock.setTcpNoDelay(true);
-            sock.setSoTimeout(30000);
+            sock.setSoTimeout(60000);
             InputStream  in  = sock.getInputStream();
             OutputStream out = sock.getOutputStream();
             while (running) {
@@ -179,12 +260,15 @@ final class GunServer {
                     return;
                 }
                 if ("POST".equals(method) && path.startsWith("/aim")) {
+                    if (requests++ == 0 || (requests & 63) == 0) sink.status("Phone connected");
                     if (body.length >= 9) apply(body, 0);
                     reply(out, "204 No Content", null, null);
                     continue;
                 }
                 if (path.equals("/") || path.startsWith("/?") || path.startsWith("/index")) {
+                    requests++;
                     reply(out, "200 OK", "text/html; charset=utf-8", page);
+                    sink.status("Page sent to the phone");
                     continue;
                 }
                 reply(out, "404 Not Found", "text/plain", "not found".getBytes(StandardCharsets.UTF_8));
@@ -219,6 +303,7 @@ final class GunServer {
                    + "Sec-WebSocket-Accept: " + accept + "\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
         out.flush();
         clientUp();
+        sink.status("Phone connected");
         try {
             while (running) {
                 int b0 = in.read();

@@ -546,6 +546,7 @@ std::atomic<int>      g_rgun_buttons{0};
 std::atomic<uint64_t> g_rgun_ms{0};
 std::mutex            g_rgun_url_mutex;
 std::string           g_rgun_url;
+std::string           g_rgun_status;
 }  // namespace
 
 namespace sm2::osd {
@@ -570,6 +571,12 @@ std::string android_remote_gun_url()
 {
     std::lock_guard<std::mutex> lock(g_rgun_url_mutex);
     return g_rgun_url;
+}
+
+std::string android_remote_gun_status()
+{
+    std::lock_guard<std::mutex> lock(g_rgun_url_mutex);
+    return g_rgun_status;
 }
 
 }  // namespace sm2::osd
@@ -597,4 +604,19 @@ Java_io_github_carlovacco8_keisho_KeishoActivity_nativeRemoteGunUrl(JNIEnv* env,
     }
     std::lock_guard<std::mutex> lock(g_rgun_url_mutex);
     g_rgun_url = std::move(text);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_carlovacco8_keisho_KeishoActivity_nativeRemoteGunStatus(JNIEnv* env, jclass, jstring text)
+{
+    std::string value;
+    if (text != nullptr) {
+        const char* chars = env->GetStringUTFChars(text, nullptr);
+        if (chars != nullptr) {
+            value = chars;
+            env->ReleaseStringUTFChars(text, chars);
+        }
+    }
+    std::lock_guard<std::mutex> lock(g_rgun_url_mutex);
+    g_rgun_status = std::move(value);
 }

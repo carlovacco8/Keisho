@@ -65,6 +65,7 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
     private static native void nativeSetSlot(int slot);
     private static native void nativeRemoteGun(float x, float y, int buttons);
     private static native void nativeRemoteGunUrl(String url);
+    private static native void nativeRemoteGunStatus(String text);
 
     private final Handler mMain = new Handler(Looper.getMainLooper());
     private File mFilesDir;
@@ -461,6 +462,16 @@ public class KeishoActivity extends SDLActivity implements InputManager.InputDev
             @Override
             public void connected(boolean on) {
                 Log.i(TAG, "phone gun " + (on ? "connected" : "gone"));
+            }
+
+            @Override
+            public void status(String text) {
+                Log.i(TAG, "phone gun: " + text);
+                try {
+                    nativeRemoteGunStatus(text);
+                } catch (UnsatisfiedLinkError ignored) {
+                    // Native side not loaded (yet).
+                }
             }
         });
         mGun.start();
