@@ -47,15 +47,29 @@
   #go { border:0; background:var(--orange); color:#111; font:700 20px -apple-system, system-ui, sans-serif;
       padding:18px 34px; border-radius:40px; }
   #err { color:var(--red); font-weight:500; }
+  #cal { position:fixed; inset:0; background:rgba(17,19,23,.97); display:none; flex-direction:column;
+      align-items:center; justify-content:center; padding:28px; text-align:center; gap:16px; z-index:6; }
+  #cal h2 { color:var(--orange); margin:0; font-size:26px; }
+  #cal p { color:#c8ccd3; margin:0; font-weight:500; }
+  #calstep { color:var(--dim); }
+  #calcancel { flex:none; padding:12px 28px; margin-top:20px; }
 </style>
 </head>
 <body>
 <div id="start">
   <h1>Pistola M2 NEXUS</h1>
   <p>Tieni il telefono come un telecomando, con la parte alta puntata verso la TV.
-     Il pollice preme <b>FUOCO</b>. Punta al centro dello schermo e premi <b>RICENTRA</b> quando il mirino si sposta.</p>
+     Il pollice preme <b>FUOCO</b>. Prima di giocare premi <b>CALIBRA</b> e punta due angoli della TV; se poi il mirino si sposta,
+     punta al centro dello schermo e premi <b>RICENTRA</b>.</p>
   <button id="go">TOCCA PER INIZIARE</button>
   <p id="err"></p>
+</div>
+
+<div id="cal">
+  <div id="calstep">1 di 2</div>
+  <h2 id="caltext">Punta l’angolo IN ALTO A SINISTRA dello schermo della TV</h2>
+  <p>Tieni il telefono fermo e tocca un punto qualsiasi di questa schermata.</p>
+  <div class="btn" id="calcancel">Annulla</div>
 </div>
 
 <header>
@@ -63,10 +77,11 @@
   <div id="status"><span id="dot"></span><span id="stext">Non collegato</span></div>
 </header>
 <div id="pad"><div class="frame"></div><div id="cross"></div></div>
-<div class="sens"><span>Sensibilità</span><input id="sens" type="range" min="18" max="70" step="1" value="38"><span id="sval"></span></div>
+<div class="sens"><span>Sensibilità</span><input id="sens" type="range" min="60" max="160" step="1" value="100"><span id="sval"></span></div>
 <div class="row">
-  <div class="btn" id="reload">RICARICA</div>
+  <div class="btn" id="calib">CALIBRA</div>
   <div class="btn" id="recenter">RICENTRA</div>
+  <div class="btn" id="reload">RICARICA</div>
 </div>
 <div id="fire">FUOCO<small>tieni premuto per sparare a raffica</small></div>
 
@@ -81,57 +96,135 @@
   // ---- state -------------------------------------------------------------
   let yaw = 0, pitch = 0, haveAngles = false;    // where the top edge points, degrees
   let refYaw = null, refPitch = 0;                // the centre of the screen
-  let sx = 0.5, sy = 0.5;                         // smoothed aim, fractions of the picture
+  let sx = 0.5, sy = 0.5;                         // filtered aim, fractions of the picture
   let buttons = 0;                                // 1 fire, 2 reload
-  let span = parseFloat(load('m2gun.span', '38')); // degrees the picture is wide
+  // Half the screen's width and height as seen from the sofa, as tangents
+  // (set by CALIBRA); the defaults fit a TV about 2.5 widths away.
+  let halfW = parseFloat(load('m2gun.halfW', String(Math.tan(19 * Math.PI / 180))));
+  let halfH = parseFloat(load('m2gun.halfH', String(Math.tan(13 * Math.PI / 180))));
+  let gain  = parseFloat(load('m2gun.gain', '100')) / 100;
 
   const sens = $('sens');
-  sens.value = String(span);
-  const showSpan = () => { $('sval').textContent = Math.round(span) + '°'; };
-  showSpan();
-  sens.addEventListener('input', () => { span = parseFloat(sens.value); save('m2gun.span', String(span)); showSpan(); });
+  sens.value = String(Math.round(gain * 100));
+  const showGain = () => { $('sval').textContent = Math.round(gain * 100) + '%'; };
+  showGain();
+  sens.addEventListener('input', () => { gain = parseFloat(sens.value) / 100; save('m2gun.gain', String(gain * 100)); showGain(); });
 
+  const D = Math.PI / 180;
   const wrap = (a) => { while (a > 180) a -= 360; while (a < -180) a += 360; return a; };
+
+  // One Euro filter: little smoothing when moving fast (no lag), a lot when
+  // nearly still (no tremble).
+  function OneEuro(minCutoff, beta) {
+    let x = null, dx = 0, t = 0;
+    const alpha = (cut, dt) => { const r = 2 * Math.PI * cut * dt; return r / (r + 1); };
+    return (v, now) => {
+      if (x === null) { x = v; t = now; return v; }
+      const dt = Math.max(1e-3, (now - t) / 1000); t = now;
+      const d = (v - x) / dt;
+      dx += alpha(1.0, dt) * (d - dx);
+      const cut = minCutoff + beta * Math.abs(dx);
+      x += alpha(cut, dt) * (v - x);
+      return x;
+    };
+  }
+  const fx = OneEuro(1.0, 6.0), fy = OneEuro(1.0, 6.0);
+
+  // The last moments of aim, so a shot uses where the phone pointed just
+  // before the thumb pressed (and nudged it).
+  const history = [];
+  function aimAt(ms) {
+    const t = performance.now() - ms;
+    for (let i = history.length - 1; i >= 0; i--) if (history[i].t <= t) return history[i];
+    return history.length ? history[0] : { x: sx, y: sy };
+  }
+  let latch = null, latchUntil = 0;
 
   // deviceorientation: the top edge's direction is (-cosB sinA, cosA cosB, sinB)
   // in the world frame, so its heading is -alpha and its elevation beta; the
   // roll (gamma) does not move the aim.
   function onOrientation(e) {
     if (e.alpha === null || e.beta === null) return;
-    const a = e.alpha * Math.PI / 180, b = e.beta * Math.PI / 180;
+    const a = e.alpha * D, b = e.beta * D;
     const vx = -Math.cos(b) * Math.sin(a), vy = Math.cos(a) * Math.cos(b), vz = Math.sin(b);
-    yaw   = Math.atan2(vx, vy) * 180 / Math.PI;
-    pitch = Math.asin(Math.max(-1, Math.min(1, vz))) * 180 / Math.PI;
+    yaw   = Math.atan2(vx, vy) / D;
+    pitch = Math.asin(Math.max(-1, Math.min(1, vz))) / D;
     haveAngles = true;
     if (refYaw === null) { refYaw = yaw; refPitch = pitch; }
     update();
   }
 
   function update() {
-    const dx = wrap(yaw - refYaw), dy = pitch - refPitch;
-    const tx = 0.5 + dx / span;
-    const ty = 0.5 - dy / (span * 0.75);
-    // Light smoothing: steadier when still, quick when swung.
-    const d = Math.hypot(tx - sx, ty - sy);
-    const k = Math.min(1, 0.35 + d * 6);
-    sx += (tx - sx) * k;
-    sy += (ty - sy) * k;
+    // The TV is flat: where the aim lands grows with the tangent of the angle.
+    const dx = Math.max(-80, Math.min(80, wrap(yaw - refYaw)));
+    const dy = Math.max(-80, Math.min(80, pitch - refPitch));
+    const tx = 0.5 + Math.tan(dx * D) / (2 * halfW / gain);
+    const ty = 0.5 - Math.tan(dy * D) / (2 * halfH / gain);
+    const now = performance.now();
+    sx = fx(tx, now);
+    sy = fy(ty, now);
+    history.push({ t: now, x: sx, y: sy });
+    while (history.length && history[0].t < now - 400) history.shift();
     const cross = $('cross');
     cross.style.left = 'calc(50% + ' + ((Math.max(-0.2, Math.min(1.2, sx)) - 0.5) * 104).toFixed(1) + 'px)';
     cross.style.top  = 'calc(50% + ' + ((Math.max(-0.2, Math.min(1.2, sy)) - 0.5) * 78).toFixed(1) + 'px)';
     send();
   }
 
+  // ---- calibration: two corners of the TV ------------------------------------
+  let calStep = 0, calA = null;
+  function rawAt(ms) {
+    // the angles (not the filtered aim) a moment ago
+    const t = performance.now() - ms;
+    for (let i = angleLog.length - 1; i >= 0; i--) if (angleLog[i].t <= t) return angleLog[i];
+    return { yaw, pitch };
+  }
+  const angleLog = [];
+  window.addEventListener('deviceorientation', () => {
+    if (!haveAngles) return;
+    const now = performance.now();
+    angleLog.push({ t: now, yaw, pitch });
+    while (angleLog.length && angleLog[0].t < now - 400) angleLog.shift();
+  });
+  function calShow(step) {
+    calStep = step;
+    $('cal').style.display = step ? 'flex' : 'none';
+    $('calstep').textContent = step + ' di 2';
+    $('caltext').textContent = step === 1 ? 'Punta l’angolo IN ALTO A SINISTRA dello schermo della TV'
+                                          : 'Ora punta l’angolo IN BASSO A DESTRA';
+  }
+  $('calib').addEventListener('click', () => { if (haveAngles) calShow(1); });
+  $('calcancel').addEventListener('click', (e) => { e.stopPropagation(); calShow(0); });
+  $('cal').addEventListener('click', () => {
+    const p = rawAt(120);
+    if (calStep === 1) { calA = p; calShow(2); return; }
+    if (calStep === 2) {
+      const w = wrap(p.yaw - calA.yaw), h = calA.pitch - p.pitch;
+      if (Math.abs(w) > 3 && Math.abs(h) > 2) {
+        halfW = Math.tan(Math.abs(w) / 2 * D);
+        halfH = Math.tan(Math.abs(h) / 2 * D);
+        save('m2gun.halfW', String(halfW));
+        save('m2gun.halfH', String(halfH));
+        refYaw   = wrap(calA.yaw + w / 2);
+        refPitch = (calA.pitch + p.pitch) / 2;
+        gain = 1; sens.value = '100'; save('m2gun.gain', '100'); showGain();
+      }
+      calShow(0);
+    }
+  });
+
   // ---- connection: WebSocket, else HTTPS POSTs ---------------------------
   let ws = null, mode = 'none', lastSent = 0, posting = false, pending = false;
   const packet = () => {
     const buf = new ArrayBuffer(9), v = new DataView(buf);
-    v.setFloat32(0, sx, true);
-    v.setFloat32(4, sy, true);
+    const useLatch = latch && performance.now() < latchUntil;
+    v.setFloat32(0, useLatch ? latch.x : sx, true);
+    v.setFloat32(4, useLatch ? latch.y : sy, true);
     v.setUint8(8, buttons);
     return buf;
   };
   function setStatus(on, text) { $('dot').className = on ? 'on' : ''; $('stext').textContent = text; }
+  const linkName = () => mode === 'ws' ? 'Collegato · veloce' : 'Collegato · lento';
 
   function send() {
     lastSent = performance.now();
@@ -142,7 +235,7 @@
     if (posting) { pending = true; return; }
     posting = true;
     fetch('/aim', { method: 'POST', body: packet(), cache: 'no-store', keepalive: false })
-      .then(() => setStatus(true, 'Collegato'))
+      .then(() => setStatus(true, linkName()))
       .catch(() => setStatus(false, 'Non collegato'))
       .finally(() => { posting = false; if (pending) { pending = false; postSoon(); } });
   }
@@ -152,7 +245,7 @@
     try {
       ws = new WebSocket('wss://' + location.host + '/ws');
       ws.binaryType = 'arraybuffer';
-      ws.onopen = () => { opened = true; mode = 'ws'; setStatus(true, 'Collegato'); send(); };
+      ws.onopen = () => { opened = true; mode = 'ws'; setStatus(true, linkName()); send(); };
       ws.onclose = () => {
         if (opened) { setStatus(false, 'Riconnessione…'); mode = 'none'; setTimeout(connect, 1000); }
         else { mode = 'post'; send(); }
@@ -167,7 +260,11 @@
 
   // ---- buttons -------------------------------------------------------------
   function hold(el, bit) {
-    const down = (e) => { e.preventDefault(); el.classList.add('down'); buttons |= bit; send(); };
+    const down = (e) => {
+      e.preventDefault(); el.classList.add('down');
+      if (bit === 1) { latch = aimAt(90); latchUntil = performance.now() + 160; }
+      buttons |= bit; send();
+    };
     const up   = (e) => { e.preventDefault(); el.classList.remove('down'); buttons &= ~bit; send(); };
     el.addEventListener('touchstart', down, { passive: false });
     el.addEventListener('touchend', up, { passive: false });
