@@ -544,6 +544,12 @@ std::atomic<float>    g_rgun_x{0.5f};
 std::atomic<float>    g_rgun_y{0.5f};
 std::atomic<int>      g_rgun_buttons{0};
 std::atomic<uint64_t> g_rgun_ms{0};
+// Auto reload: after a shot is released, a short off-screen shot between
+// these two times (SDL ticks), so the gun never runs dry.
+std::atomic<uint64_t> g_rgun_reload_from{0};
+std::atomic<uint64_t> g_rgun_reload_to{0};
+constexpr uint64_t    kAutoReloadDelayMs = 60;   // let the game see the release first
+constexpr uint64_t    kAutoReloadHoldMs  = 90;   // a few frames of off-screen trigger
 std::mutex            g_rgun_url_mutex;
 std::string           g_rgun_url;
 std::string           g_rgun_status;
@@ -559,11 +565,13 @@ bool android_remote_gun(float* x, float* y, bool* trigger, bool* reload)
     if (last == 0 || SDL_GetTicks() - last > 1500) {
         return false;
     }
-    const int b = g_rgun_buttons.load();
+    const int      b   = g_rgun_buttons.load();
+    const uint64_t now = SDL_GetTicks();
+    const bool     autoreload = now >= g_rgun_reload_from.load() && now < g_rgun_reload_to.load();
     *x       = g_rgun_x.load();
     *y       = g_rgun_y.load();
-    *trigger = (b & 1) != 0;
-    *reload  = (b & 2) != 0;
+    *trigger = (b & 1) != 0 && !autoreload;
+    *reload  = (b & 2) != 0 || autoreload;
     return true;
 }
 
@@ -585,10 +593,18 @@ extern "C" JNIEXPORT void JNICALL
 Java_io_github_carlovacco8_keisho_KeishoActivity_nativeRemoteGun(JNIEnv*, jclass, jfloat x, jfloat y,
                                                                  jint buttons)
 {
+    const int      before = g_rgun_buttons.exchange(buttons);
+    const uint64_t now    = SDL_GetTicks();
+    if ((buttons & 1) != 0 && (before & 1) == 0) {
+        // A new shot cancels a reload still waiting, so it lands on screen.
+        g_rgun_reload_to.store(0);
+    } else if ((buttons & 4) != 0 && (before & 1) != 0 && (buttons & 1) == 0) {
+        g_rgun_reload_from.store(now + kAutoReloadDelayMs);
+        g_rgun_reload_to.store(now + kAutoReloadDelayMs + kAutoReloadHoldMs);
+    }
     g_rgun_x.store(x);
     g_rgun_y.store(y);
-    g_rgun_buttons.store(buttons);
-    g_rgun_ms.store(SDL_GetTicks());
+    g_rgun_ms.store(now);
 }
 
 extern "C" JNIEXPORT void JNICALL

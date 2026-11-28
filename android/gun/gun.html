@@ -34,7 +34,14 @@
   #fire.down small { color:#222; }
   .sens { display:flex; align-items:center; gap:10px; padding:0 16px 12px; color:var(--dim); font-size:13px; }
   .sens input { flex:1; accent-color:var(--orange); }
-  #pad { position:relative; height:90px; margin:0 12px 10px; border-radius:16px; background:#0b0c0f;
+  #pad .hint { position:absolute; left:0; right:0; bottom:6px; text-align:center; font-size:11px; color:var(--dim); }
+  .opts { display:flex; gap:12px; padding:0 16px 12px; align-items:center; justify-content:space-between;
+      color:var(--dim); font-size:13px; flex-wrap:wrap; }
+  .opts select { margin-left:6px; background:var(--bar); color:#fff; border:1px solid var(--edge); border-radius:10px;
+      padding:6px 8px; font:500 14px -apple-system, system-ui, sans-serif; }
+  .opts .chk { display:flex; align-items:center; gap:8px; color:#fff; }
+  .opts input[type=checkbox] { width:22px; height:22px; accent-color:var(--orange); }
+  #pad { position:relative; height:110px; touch-action:none; margin:0 12px 10px; border-radius:16px; background:#0b0c0f;
       border:1px solid var(--edge); overflow:hidden; }
   #pad .frame { position:absolute; left:50%; top:50%; width:104px; height:78px; transform:translate(-50%,-50%);
       border:1px solid var(--edge); }
@@ -58,7 +65,8 @@
 <body>
 <div id="start">
   <h1>Pistola M2 NEXUS</h1>
-  <p>Tieni il telefono come un telecomando, con la parte alta puntata verso la TV.
+  <p>Tieni il telefono come un telecomando, con la parte alta puntata verso la TV
+     (o, se preferisci, come una fotocamera: scegli l’impugnatura nella pagina).
      Il pollice preme <b>FUOCO</b>. Prima di giocare premi <b>CALIBRA</b> e punta due angoli della TV; se poi il mirino si sposta,
      punta al centro dello schermo e premi <b>RICENTRA</b>.</p>
   <button id="go">TOCCA PER INIZIARE</button>
@@ -76,7 +84,16 @@
   <div class="logo">M2 NEXUS</div>
   <div id="status"><span id="dot"></span><span id="stext">Non collegato</span></div>
 </header>
-<div id="pad"><div class="frame"></div><div id="cross"></div></div>
+<div id="pad"><div class="frame"></div><div id="cross"></div><div class="hint">trascina qui per spostare il mirino</div></div>
+<div class="opts">
+  <label>Impugnatura
+    <select id="grip">
+      <option value="remote">Come un telecomando</option>
+      <option value="camera">Come una fotocamera</option>
+    </select>
+  </label>
+  <label class="chk"><input type="checkbox" id="autoreload"> Ricarica automatica</label>
+</div>
 <div class="sens"><span>Sensibilità</span><input id="sens" type="range" min="60" max="160" step="1" value="100"><span id="sval"></span></div>
 <div class="row">
   <div class="btn" id="calib">CALIBRA</div>
@@ -111,6 +128,33 @@
   sens.addEventListener('input', () => { gain = parseFloat(sens.value) / 100; save('m2gun.gain', String(gain * 100)); showGain(); });
 
   const D = Math.PI / 180;
+  let grip = load('m2gun.grip', 'remote');
+  $('grip').value = grip;
+  $('grip').addEventListener('change', () => {
+    grip = $('grip').value; save('m2gun.grip', grip);
+    refYaw = null;   // re-centre on the next reading
+  });
+  const autoBox = $('autoreload');
+  autoBox.checked = load('m2gun.auto', '1') === '1';
+  autoBox.addEventListener('change', () => { save('m2gun.auto', autoBox.checked ? '1' : '0'); send(); });
+
+  // Drag on the little screen to move the crosshair where the phone really
+  // points: it shifts the centre, finely (a long drag for a small move).
+  (() => {
+    let lx = 0, ly = 0;
+    const pad = $('pad');
+    pad.addEventListener('touchstart', (e) => { e.preventDefault(); lx = e.touches[0].clientX; ly = e.touches[0].clientY; }, { passive: false });
+    pad.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      const t = e.touches[0], dx = t.clientX - lx, dy = t.clientY - ly;
+      lx = t.clientX; ly = t.clientY;
+      if (refYaw === null) return;
+      const fx = dx / 500, fy = dy / 500;     // fraction of the TV per pixel dragged
+      refYaw   = wrap(refYaw - Math.atan(fx * 2 * halfW / gain) / D);
+      refPitch = refPitch + Math.atan(fy * 2 * halfH / gain) / D;
+      update();
+    }, { passive: false });
+  })();
   const wrap = (a) => { while (a > 180) a -= 360; while (a < -180) a += 360; return a; };
 
   // One Euro filter: little smoothing when moving fast (no lag), a lot when
@@ -146,7 +190,18 @@
   function onOrientation(e) {
     if (e.alpha === null || e.beta === null) return;
     const a = e.alpha * D, b = e.beta * D;
-    const vx = -Math.cos(b) * Math.sin(a), vy = Math.cos(a) * Math.cos(b), vz = Math.sin(b);
+    let vx, vy, vz;
+    if (grip === 'camera') {
+      // The back of the phone points at the TV: -Z of the device in the world.
+      const g = (e.gamma || 0) * D;
+      const cA = Math.cos(a), sA = Math.sin(a), cB = Math.cos(b), sB = Math.sin(b), cG = Math.cos(g), sG = Math.sin(g);
+      vx = -(cA * sG + cG * sA * sB);
+      vy = -(sA * sG - cA * cG * sB);
+      vz = -(cB * cG);
+    } else {
+      // The top edge points at the TV.
+      vx = -Math.cos(b) * Math.sin(a); vy = Math.cos(a) * Math.cos(b); vz = Math.sin(b);
+    }
     yaw   = Math.atan2(vx, vy) / D;
     pitch = Math.asin(Math.max(-1, Math.min(1, vz))) / D;
     haveAngles = true;
@@ -220,7 +275,7 @@
     const useLatch = latch && performance.now() < latchUntil;
     v.setFloat32(0, useLatch ? latch.x : sx, true);
     v.setFloat32(4, useLatch ? latch.y : sy, true);
-    v.setUint8(8, buttons);
+    v.setUint8(8, buttons | (autoBox.checked ? 4 : 0));
     return buf;
   };
   function setStatus(on, text) { $('dot').className = on ? 'on' : ''; $('stext').textContent = text; }

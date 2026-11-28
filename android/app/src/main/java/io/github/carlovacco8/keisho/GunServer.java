@@ -46,7 +46,7 @@ import javax.net.ssl.SSLSocketFactory;
  *
  * Each message is 9 bytes: x, y (float32, little endian, fractions of the
  * game picture; outside 0..1 is off screen) and a button byte
- * (1 trigger, 2 reload).
+ * (1 trigger, 2 reload, 4 auto reload after each shot).
  */
 final class GunServer {
     private static final String TAG  = "M2Gun";
